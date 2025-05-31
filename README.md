@@ -1,7 +1,7 @@
 # Perdanga Software Solutions
 
 ## Overview
-https://github.com/perdanger/Perdanga-Software-Solutions/blob/cfab64e4442c46059d256c1d11cd9170b903573d/PerdangaSoftwareSolutions.png
+![Image alt](thttps://github.com/perdanger/Perdanga-Software-Solutions/blob/cfab64e4442c46059d256c1d11cd9170b903573d/PerdangaSoftwareSolutions.png)
 
 Perdanga Software Solutions is a powerful and easy-to-use PowerShell script designed to automate the installation of essential Windows software using Chocolatey. It also provides convenient options for managing Windows updates and activation, all through an intuitive command-line interface and an optional graphical user interface.
 
