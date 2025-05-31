@@ -1,4 +1,4 @@
-# Perdanga Software Solutions Installer
+# Perdanga Software Solutions
 
 ## Overview
 
