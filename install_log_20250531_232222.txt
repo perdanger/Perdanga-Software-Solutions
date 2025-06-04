@@ -1,0 +1,74 @@
+﻿[05/31/2025 23:22:22] Checking Chocolatey installation...
+[05/31/2025 23:22:22] Found Chocolatey version: 2.4.3
+[05/31/2025 23:22:22] Clearing Chocolatey cache...
+Chocolatey v2.4.3
+Cache cleanup
+No cached items available to be removed in 'C:\ProgramData\ChocolateyHttpCache'.
+Directory 'C:\Users\Admin\.chocolatey\http-cache' does not exist.
+No cached items available to be removed in 'C:\Users\Admin\.chocolatey\http-cache'.
+[05/31/2025 23:22:23] Cache cleared.
+[05/31/2025 23:22:23] Enabling automatic confirmation...
+Chocolatey v2.4.3
+Nothing to change. Config already set.
+[05/31/2025 23:22:24] Automatic confirmation enabled.
+[05/31/2025 23:22:30] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:31] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:31] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:32] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:32] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:32] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:33] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:33] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:34] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:36] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:36] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:38] Invalid user input: 'ff' - contains invalid characters.Invalid input: 'ff'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:40] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:42] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:44] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:46] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:46] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:46] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:49] Invalid user input: 'fdsf' - contains invalid characters.Invalid input: 'fdsf'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:51] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:53] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:55] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:55] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:55] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:57] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:57] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:22:57] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:22:59] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:23:02] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:23:02] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:23:02] Invalid user input: 'f' - contains invalid characters.Invalid input: 'f'. Use only letters [A-E], numbers [1-19], spaces, or commas.
+[05/31/2025 23:23:04] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:23:04] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:23:04] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:23:04] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:23:04] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:23:04] No input detected. Please enter an option or program number(s).
+[05/31/2025 23:23:09] User chose GUI-based selection.
+[05/31/2025 23:23:13] No programs selected via GUI.
+[05/31/2025 23:23:14] User chose GUI-based selection.
+[05/31/2025 23:23:18] User chose GUI-based selection.
+[05/31/2025 23:23:21] Starting installation of 1 program(s)...
+[05/31/2025 23:23:21] Installing vlc (from list)...Installing vlc...
+Chocolatey v2.4.3
+Installing the following packages:
+vlc
+By installing, you accept licenses for the packages.
+vlc v3.0.21 already installed.
+ Use --force to reinstall, specify a version to install, or try upgrade.
+
+Chocolatey installed 0/1 packages. 
+ See the log for details (C:\ProgramData\chocolatey\logs\chocolatey.log).
+
+Warnings:
+ - vlc - vlc v3.0.21 already installed.
+ Use --force to reinstall, specify a version to install, or try upgrade.
+[05/31/2025 23:23:22] vlc is already installed or up to date.
+[05/31/2025 23:23:22] Selected programs installed. Perdanga Forever.
+[05/31/2025 23:23:27] User chose GUI-based selection.
+[05/31/2025 23:24:02] User input for multiple programs: '1 5 10 12 20'. Valid programs: 7zip.install, gpu-z, occt, revo-uninstaller. Invalid inputs: 20
+[05/31/2025 23:24:06] Installation of selected programs from list cancelled.
