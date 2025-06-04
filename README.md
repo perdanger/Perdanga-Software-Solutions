@@ -1,17 +1,14 @@
 # Perdanga Software Solutions
 
 ## Overview
-<<<<<<< HEAD
-=======
 ![image alt](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/pss1.1.png?raw=true)
->>>>>>> 3941a0dd27c53f4c7f5d1ce1c277202f8f32d74b
 
-![image alt](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/PerdangaSoftwareSolutions.png?raw=true)Perdanga Software Solutions is a powerful and easy-to-use PowerShell script designed to automate the installation, uninstallation, and management of essential Windows software using Chocolatey. It also provides convenient options for managing Windows updates and activation, all through an intuitive command-line interface and an optional graphical user interface.
+Perdanga Software Solutions is a powerful and easy-to-use PowerShell script designed to automate the installation, uninstallation, and management of essential Windows software using Chocolatey. It also provides convenient options for managing Windows updates, Windows activation, and Spotify activation, all through an intuitive command-line interface and an optional graphical user interface.
 
 The scripts consist of:
 
 - `RunPerdangaSoftwareSolutions.bat`: A batch script that verifies administrative privileges and launches the PowerShell script.
-- `PerdangaSoftwareSolutions.ps1`: The core PowerShell script that manages software installation, uninstallation, Windows updates, and activation.
+- `PerdangaSoftwareSolutions.ps1`: The core PowerShell script that manages software installation, uninstallation, Windows updates, Windows activation, and Spotify activation.
 
 ## Features
 
@@ -21,6 +18,7 @@ The scripts consist of:
 - **Dual Interface**: Choose between a command-line interface or a graphical user interface for program selection and uninstallation (GUI availability depends on system configuration).
 - **Windows Updates**: Check and install Windows updates using the PSWindowsUpdate module.
 - **Windows Activation**: Optional activation using an external script from `https://get.activated.win`.
+- **Spotify Activation**: Enhance Spotify with additional features using an external script from SpotX-Official GitHub.
 - **Detailed Logging**: Logs all actions to a timestamped file for easy troubleshooting.
 - **Robust Error Handling**: Includes checks for PowerShell version, administrative privileges, and Chocolatey installation.
 
@@ -77,6 +75,7 @@ The script automates the installation of the following essential software via Ch
      - **\[G\] Select Specific Programs via GUI**
      - **\[U\] Uninstall Programs via GUI**
      - **\[C\] Install Custom Package**
+     - **\[X\] Activate Spotify**
      - **\[W\] Activate Windows**
      - **\[N\] Update Windows**
      - **\[E\] Exit Script**

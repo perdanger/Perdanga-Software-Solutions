@@ -15,7 +15,7 @@ try {
     $Host.UI.RawUI.BufferSize = New-Object Management.Automation.Host.Size(150, 3000)
     $Host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(150, 50)
 } catch {
-    Write-Host "WARNING: Could not set console buffer or window size. This may happen in some environments (e.g., VS Code integrated terminal).\" -ForegroundColor Yellow
+    Write-Host "WARNING: Could not set console buffer or window size. This may happen in some environments (e.g., VS Code integrated terminal)." -ForegroundColor Yellow
     Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor DarkYellow
 }
 
@@ -27,9 +27,7 @@ $script:logFile = Join-Path -Path $PSScriptRoot -ChildPath "install_log_$timesta
 $programs = @("7zip.install", "brave", "file-converter", "googlechrome", "gpu-z", "hwmonitor", "imageglass", "nvidia-app", "obs-studio", "occt", "qbittorrent", "revo-uninstaller", "spotify", "steam", "telegram", "vcredist-all", "vlc", "winrar", "wiztree", "discord", "git")
 $script:sortedPrograms = $programs | Sort-Object
 
-# Assign numbers to programs, excluding main menu command letters
-# Added 'u' for Uninstall GUI, 'c' for Custom Package
-$script:mainMenuLetters = @('a', 'e', 'g', 'n', 'w', 'u', 'c') # Lowercase main command letters
+$script:mainMenuLetters = @('a', 'e', 'g', 'n', 'w', 'u', 'c', 'x') # Lowercase main command letters
 $script:availableProgramNumbers = 1..($script:sortedPrograms.Count) | ForEach-Object { $_.ToString() }
 
 $script:programToNumberMap = @{} # Maps program name to its assigned number for display
@@ -110,8 +108,8 @@ function Install-Chocolatey {
             try {
                 Write-LogAndHost "Installing Chocolatey..." -NoLog
                 Set-ExecutionPolicy Bypass -Scope Process -Force
-                [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-                $installOutput = Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1')) 2>&1
+                [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072 # Tls12
+                $installOutput = Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) 2>&1
                 $installOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
                 if ($LASTEXITCODE -eq 0) {
                     Write-LogAndHost "Chocolatey installed successfully." -HostColor Green
@@ -153,37 +151,90 @@ function Invoke-WindowsActivation {
     }
     Write-LogAndHost "Attempting Windows activation..." -NoHost
     try {
-        irm https://get.activated.win | iex 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
-        if ($LASTEXITCODE -eq 0) {
-            Write-LogAndHost "Windows activation completed successfully."
+        # Ensure TLS 1.2 for the activation script download
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        Invoke-RestMethod -Uri "https://get.activated.win" | Invoke-Expression 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+        # irm https://get.activated.win | iex (original command)
+        if ($LASTEXITCODE -eq 0) { # This might not be reliable for iex from irm
+            Write-LogAndHost "Windows activation script executed. Check console output for status."
         }
         else {
-            Write-LogAndHost "ERROR: Windows activation failed. Exit code: $LASTEXITCODE" -HostColor Red
+            Write-LogAndHost "Windows activation script execution might have failed. Exit code: $LASTEXITCODE" -HostColor Yellow
         }
     }
     catch {
         Write-LogAndHost "ERROR: Exception during Windows activation - $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during Windows activation - "
     }
+    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+    $null = Read-Host
 }
 
-# Function to update all installed programs
-function Invoke-UpdateAllPrograms {
-    Write-LogAndHost "Updating all installed programs..."
+# Function to apply SpotX 
+function Invoke-SpotXActivation {
+    Write-LogAndHost "Attempting Spotify Activation..." -HostColor Cyan
+    Write-LogAndHost "INFO: This process modifies your Spotify client. It is recommended to close Spotify before proceeding." -HostColor Yellow
+    Write-LogAndHost "WARNING: This script downloads and executes code from the internet (SpotX-Official GitHub). Ensure you trust the source." -HostColor Yellow
+
     try {
-        $updateOutput = & choco upgrade all -y --source="https://community.chocolatey.org/api/v2/" --no-progress 2>&1
-        $updateOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
-        if ($LASTEXITCODE -eq 0) {
-            Write-LogAndHost "All programs updated successfully."
+        Write-LogAndHost "Continue with Spotify Activation? (Type y/n then press Enter)" -HostColor Yellow -NoLog
+        $confirmSpotX = Read-Host
+        if ($confirmSpotX.Trim().ToLower() -ne 'y') {
+            Write-LogAndHost "Spotify Activation cancelled by user." -HostColor Yellow
+            return
         }
-        else {
-            Write-LogAndHost "ERROR: Failed to update programs." -HostColor Red
+    } catch {
+        Write-LogAndHost "ERROR: Could not read user input for Spotify Activation confirmation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Failed to read user input for Spotify Activation confirmation - "
+        return
+    }
+
+    $spotxParams = "-new_theme" # SpotX parameters from original bat file
+    $spotxUrlPrimary = 'https://raw.githubusercontent.com/SpotX-Official/spotx-official.github.io/main/run.ps1'
+    $spotxUrlFallback = 'https://spotx-official.github.io/run.ps1'
+
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+    $scriptContentToExecute = $null
+    $effectiveParams = $spotxParams
+
+    try {
+        Write-LogAndHost "Downloading SpotX script from primary URL: $spotxUrlPrimary" -NoHost
+        $scriptContentToExecute = (Invoke-WebRequest -UseBasicParsing -Uri $spotxUrlPrimary -ErrorAction Stop).Content
+        Write-LogAndHost "Successfully downloaded from primary URL." -NoHost
+    } catch {
+        Write-LogAndHost "Primary SpotX URL failed. Error: $($_.Exception.Message)" -HostColor DarkYellow -LogPrefix "SpotX Primary Download Failed: "
+        Write-LogAndHost "Attempting fallback URL: $spotxUrlFallback" -NoHost
+        try {
+            $scriptContentToExecute = (Invoke-WebRequest -UseBasicParsing -Uri $spotxUrlFallback -ErrorAction Stop).Content
+            Write-LogAndHost "Successfully downloaded from fallback URL." -NoHost
+        } catch {
+            Write-LogAndHost "ERROR: Fallback SpotX URL also failed. Error: $($_.Exception.Message)" -HostColor Red -LogPrefix "SpotX Fallback Download Failed: "
+            Write-LogAndHost "Spotify Activation cannot proceed." -HostColor Red
+            $_ | Out-File -FilePath $script:logFile -Append -Encoding UTF8 # Log the full error for fallback
+            Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+            $null = Read-Host
+            return
         }
     }
-    catch {
-        Write-LogAndHost "ERROR: Exception occurred while updating programs." -HostColor Red -LogPrefix "Error: Exception during program update - "
+
+    if ($scriptContentToExecute) {
+        Write-LogAndHost "Executing SpotX script with parameters: '$effectiveParams'"
+        $fullScriptToRun = "$scriptContentToExecute $effectiveParams"
+        try {
+            Invoke-Expression -Command $fullScriptToRun 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+            Write-LogAndHost "SpotX script execution attempt finished. Check console output from SpotX above for status." -HostColor Green
+        } catch {
+            Write-LogAndHost "ERROR: Exception occurred during SpotX script execution. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during SpotX execution - "
+            $_ | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+        }
+    } else {
+        # This case should be covered by the try-catch blocks above, but as a safeguard:
+        Write-LogAndHost "ERROR: Failed to obtain SpotX script content." -HostColor Red
     }
-    Write-Host ""
+
+    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+    $null = Read-Host
 }
+
 
 # Function to perform Windows update
 function Invoke-WindowsUpdate {
@@ -191,22 +242,24 @@ function Invoke-WindowsUpdate {
     try {
         if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
             Write-LogAndHost "PSWindowsUpdate module not found. Installing..."
-            Install-Module -Name PSWindowsUpdate -Force -ErrorAction Stop
-            Write-LogAndHost "PSWindowsUpdate module installed successfully."
+            Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser -ErrorAction Stop # Install for current user to avoid admin issues with Install-Module
+            Write-LogAndHost "PSWindowsUpdate module installed successfully for current user."
         }
         Import-Module PSWindowsUpdate -ErrorAction Stop
         Write-LogAndHost "Checking for available updates..."
         $updates = Get-WindowsUpdate -ErrorAction Stop
         if ($updates.Count -gt 0) {
             Write-LogAndHost "Found $($updates.Count) updates. Installing..."
-            Install-WindowsUpdate -AcceptAll -ErrorAction Stop
-            Write-LogAndHost "Windows updates installed successfully."
+            Install-WindowsUpdate -AcceptAll -AutoReboot -ErrorAction Stop # Added AutoReboot, user should be aware
+            Write-LogAndHost "Windows updates installed successfully. A reboot might be required."
         } else {
             Write-LogAndHost "No updates available."
         }
     } catch {
-        Write-LogAndHost "ERROR: Failed to update Windows." -HostColor Red -LogPrefix "Error during Windows update: "
+        Write-LogAndHost "ERROR: Failed to update Windows. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Error during Windows update: "
     }
+    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+    $null = Read-Host
 }
 
 # Function to install programs using Chocolatey
@@ -242,7 +295,7 @@ function Install-Programs {
                 Write-LogAndHost "ERROR: Failed to install $program. Exit code: $LASTEXITCODE. Details: $($installOutput | Out-String)" -HostColor Red -LogPrefix "Error installing $program. "
             }
         } catch {
-            $allSuccess = $false
+            $allSuccess = false
             Write-LogAndHost "ERROR: Exception occurred while installing $program. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during installation of $program - "
         }
         Write-Host ""
@@ -252,7 +305,7 @@ function Install-Programs {
 
 # Function to get installed Chocolatey packages
 function Get-InstalledChocolateyPackages {
-    $chocoLibPath = "C:\ProgramData\chocolatey\lib"
+    $chocoLibPath = Join-Path -Path $env:ChocolateyInstall -ChildPath "lib" # Use env variable for choco path
     $installedPackages = @()
     if (Test-Path $chocoLibPath) {
         try {
@@ -295,7 +348,7 @@ function Uninstall-Programs {
                 Write-LogAndHost "ERROR: Failed to uninstall $program. Exit code: $LASTEXITCODE. Details: $($uninstallOutput | Out-String)" -HostColor Red -LogPrefix "Error uninstalling $program. "
             }
         } catch {
-            $allSuccess = $false
+            $allSuccess = false
             Write-LogAndHost "ERROR: Exception occurred while uninstalling $program. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during uninstallation of $program - "
         }
         Write-Host ""
@@ -310,53 +363,24 @@ function Test-ChocolateyPackage {
     )
     Write-LogAndHost "Searching for package '$PackageName' in Chocolatey repository..." -NoLog
     try {
-        $tempStdoutFile = Join-Path -Path $env:TEMP -ChildPath "choco_search_stdout_$(New-Guid).txt"
-        $tempStderrFile = Join-Path -Path $env:TEMP -ChildPath "choco_search_stderr_$(New-Guid).txt"
+        # Suppress progress for search command
+        $searchOutput = & choco search $PackageName --exact --limit-output --source="https://community.chocolatey.org/api/v2/" --no-progress 2>&1
+        $searchOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
 
-        $searchArguments = @(
-            "search",
-            $PackageName,
-            "--exact",
-            "--limit-output",
-            "--source=https://community.chocolatey.org/api/v2/",
-            "--no-progress" # Suppress progress bar
-        )
-        
-        $chocoCmd = Get-Command choco -ErrorAction SilentlyContinue
-        if (-not $chocoCmd) {
-            Write-LogAndHost "ERROR: Chocolatey command (choco) not found. Cannot search for package." -HostColor Red
-            return $false
+        if ($LASTEXITCODE -ne 0) {
+             Write-LogAndHost "Error during 'choco search' for '$PackageName'. Exit code: $LASTEXITCODE. Output: $($searchOutput | Out-String)" -HostColor Red
+             return $false
         }
-
-        $process = Start-Process -FilePath $chocoCmd.Source -ArgumentList $searchArguments -Wait -NoNewWindow -PassThru -RedirectStandardOutput $tempStdoutFile -RedirectStandardError $tempStderrFile
-        $searchExitCode = $process.ExitCode
         
-        $stdout = Get-Content $tempStdoutFile -ErrorAction SilentlyContinue
-        $stderr = Get-Content $tempStderrFile -ErrorAction SilentlyContinue
-        
-        Remove-Item $tempStdoutFile -ErrorAction SilentlyContinue
-        Remove-Item $tempStderrFile -ErrorAction SilentlyContinue
-
-        Write-LogAndHost "choco search for '$PackageName' exited with code $searchExitCode." -NoHost
-        if ($stdout) { Write-LogAndHost "stdout: $($stdout | Out-String)" -NoHost }
-        if ($stderr) { Write-LogAndHost "stderr: $($stderr | Out-String)" -NoHost }
-
-        if ($searchExitCode -ne 0) {
-            Write-LogAndHost "Error during 'choco search' for '$PackageName'. Exit code: $searchExitCode. Stderr: $($stderr | Out-String)" -HostColor Red
-            return $false
-        }
-
-        $trimmedStdout = if ($stdout) { ($stdout | ForEach-Object {$_.Trim()}) -join "`n" } else { "" }
-
-        # MODIFIED CONDITION: Check if stdout is exactly the package name OR starts with packagename|
-        if (-not [string]::IsNullOrWhiteSpace($trimmedStdout) -and 
-            ( ($trimmedStdout -ieq $PackageName) -or ($trimmedStdout -ilike "$($PackageName)|*") )
-           ) {
-            Write-LogAndHost "Package '$PackageName' found in repository (Search result: '$trimmedStdout')." -HostColor Green
-            return $true
+        # Check if the output contains the package name (choco search output format can vary)
+        # A simple check: if the package name is found in the output lines.
+        # More robust: choco search <pkg> --exact returns "<pkg>|<version>" if found, or "0 packages found."
+        if ($searchOutput -match "$($PackageName)\|.*" -or $searchOutput -match "1 packages found.") { # Check for exact match pattern or count
+             Write-LogAndHost "Package '$PackageName' found in repository. Search output: $($searchOutput | Select-Object -First 1)" -HostColor Green
+             return $true
         } else {
-            Write-LogAndHost "Package '$PackageName' not found as an exact match or prefix in Chocolatey repository. Expected '$PackageName' or '$($PackageName)|*', got '$trimmedStdout'." -HostColor Yellow
-            return $false
+             Write-LogAndHost "Package '$PackageName' not found as an exact match in Chocolatey repository. Search output: $($searchOutput | Out-String)" -HostColor Yellow
+             return $false
         }
 
     } catch {
@@ -378,7 +402,7 @@ function Show-Menu {
         "    _\/\\\/////////_____/\\\/////\\\_\/\\\/////\\\___/\\\\\\\\\__\////////\\\___\/\\\////\\\__\//\\\\\\\\\_\////////\\\____",
         "     _\/\\\_____________/\\\\\\\\\\\__\/\\\___\///___/\\\////\\\____/\\\\\\\\\\__\/\\\__\//\\\__\///////\\\___/\\\\\\\\\\___",
         "      _\/\\\____________\//\\///////___\/\\\_________\/\\\__\/\\\___/\\\/////\\\__\/\\\___\/\\\__/\\_____\\\__/\\\/////\\\___",
-        "       _\/\\\_____________\//\\\\\\\\\\_\/\\\_________\//\\\\\\\/\\_\//\\\\\\\\/\\_\/\\\___\/\\\_\//\\\\\\\\__\//\\\\\\\\/\\__",
+        "       _\/\\\_____________\//\\\\\\\\\\_\/\\\_________\/\\\_________\//\\\\\\\\/\\_\/\\\___\/\\\_\//\\\\\\\\__\//\\\\\\\\/\\__",
         "        _\///_______________\//////////__\///___________\///////\//___\////////\//__\///____\///___\////////____\////////\//___",
         "         __/\\\\\\\\\\\\\\\_____________________________________________________________________________________________________",
         "          _\/\\\///////////______________________________________________________________________________________________________",
@@ -396,25 +420,27 @@ function Show-Menu {
     }
 
     $menuLines = New-Object System.Collections.Generic.List[string]
-    $fixedMenuWidth = 67
+    $fixedMenuWidth = 67 # Adjusted for potentially longer new option
     $pssText = "Perdanga Software Solutions"
-    $pssUnderline = "==================================================================="
-    $dashedLine = "-------------------------------------------------------------------"
-    $fixedHeaderPadding = 22 
+    $pssUnderline = "=" * $fixedMenuWidth
+    $dashedLine = "-" * $fixedMenuWidth
+    $fixedHeaderPadding = [math]::Floor(($fixedMenuWidth - $pssText.Length) / 2)
+    if ($fixedHeaderPadding -lt 0) { $fixedHeaderPadding = 0 }
     $centeredPssTextLine = (" " * $fixedHeaderPadding) + $pssText
 
     $menuLines.Add($pssUnderline)
     $menuLines.Add($centeredPssTextLine)
     $menuLines.Add($dashedLine)
-    $menuLines.Add(" Chocolatey Package Manager [PSS v1.1] ($(Get-Date -Format "dd.MM.yyyy HH:mm"))")
-    $menuLines.Add(" Log saved to: install_log_$timestamp.txt")
+    $menuLines.Add(" Chocolatey Package Manager [PSS v1.2] ($(Get-Date -Format "dd.MM.yyyy HH:mm"))") # Version bump
+    # Display only the filename of the log file
+    $menuLines.Add(" Log saved to: $(Split-Path -Leaf $script:logFile)")
     $menuLines.Add(" $($script:sortedPrograms.Count) programs available for installation")
     $menuLines.Add($pssUnderline)
     $menuLines.Add("")
 
     $programHeader = "Available Programs for Installation:"
     $centeredProgramHeader = (" " * (($fixedMenuWidth - $programHeader.Length) / 2)) + $programHeader
-    $programUnderline = "-------------------------------------------------------------------"
+    $programUnderline = "-" * $fixedMenuWidth
     $menuLines.Add($centeredProgramHeader)
     $menuLines.Add($programUnderline)
 
@@ -437,42 +463,46 @@ function Show-Menu {
 
     $col1MaxLength = ($programColumns[0] | Measure-Object -Property Length -Maximum).Maximum
     $col2MaxLength = ($programColumns[1] | Measure-Object -Property Length -Maximum).Maximum
-    $col3MaxLength = ($programColumns[2] | Measure-Object -Property Length -Maximum).Maximum
+    # $col3MaxLength = ($programColumns[2] | Measure-Object -Property Length -Maximum).Maximum # Not used if only 2 cols for programs now
     if ($col1MaxLength -eq $null) {$col1MaxLength = 0}
     if ($col2MaxLength -eq $null) {$col2MaxLength = 0}
-    if ($col3MaxLength -eq $null) {$col3MaxLength = 0}
+    # if ($col3MaxLength -eq $null) {$col3MaxLength = 0}
 
-    $maxRows = [math]::Max($programColumns[0].Count, [math]::Max($programColumns[1].Count, $programColumns[2].Count))
+    $maxRows = [math]::Max($programColumns[0].Count, [math]::Max($programColumns[1].Count, $programColumns[2].Count)) # Still use Max for safety
 
     for ($i = 0; $i -lt $maxRows; $i++) {
         $line = "  "
-        if ($i -lt $programColumns[0].Count) { $line += $programColumns[0][$i].PadRight($col1MaxLength) } 
-        else { $line += "".PadRight($col1MaxLength) }
-        $line += "    " 
-        if ($i -lt $programColumns[1].Count) { $line += $programColumns[1][$i].PadRight($col2MaxLength) }
-        else { $line += "".PadRight($col2MaxLength) }
-        $line += "    " 
-        if ($i -lt $programColumns[2].Count) { $line += $programColumns[2][$i].PadRight($col3MaxLength) }
+        if ($i -lt $programColumns[0].Count) { $line += $programColumns[0][$i].PadRight($col1MaxLength + 2) } # Add padding between columns
+        else { $line += "".PadRight($col1MaxLength + 2) }
+        
+        if ($i -lt $programColumns[1].Count) { $line += $programColumns[1][$i].PadRight($col2MaxLength + 2) }
+        else { $line += "".PadRight($col2MaxLength + 2) }
+        
+        if ($i -lt $programColumns[2].Count) { $line += $programColumns[2][$i] } # No PadRight for last column
         $menuLines.Add($line.TrimEnd())
     }
     $menuLines.Add("")
 
     $optionsHeader = "Select an Option:"
-    $optionsUnderline = "-------------------------------------------------------------------"
+    $optionsUnderline = "-" * $fixedMenuWidth
     $centeredOptionsHeader = (" " * (($fixedMenuWidth - $optionsHeader.Length) / 2)) + $optionsHeader
     $menuLines.Add($centeredOptionsHeader)
     $menuLines.Add($optionsUnderline)
 
+    # Adjusted spacing for options to fit within $fixedMenuWidth
     [string[]]$optionLines = @( 
-        "                  [A] Install All Programs                   ",
-        "                  [G] Select Specific Programs via GUI       ",
-        "                  [U] Uninstall Programs via GUI             ", 
-        "                  [C] Install Custom Package                 ", # New Option
-        "                  [W] Activate Windows                       ",
-        "                  [N] Update Windows                         ",
-        "                  [E] Exit Script                            "
+        "        [A] Install All Programs                       ",
+        "        [G] Select Specific Programs via GUI           ",
+        "        [U] Uninstall Programs via GUI                 ", 
+        "        [C] Install Custom Program                     ",
+        "        [X] Activate Spotify                           ", 
+        "        [W] Activate Windows                           ",
+        "        [N] Update Windows                             ", # Changed text here
+        "        [E] Exit Script                                "
     )
     $menuLines.AddRange($optionLines)
+    $menuLines.Add($optionsUnderline)
+
 
     $consoleWidth = $Host.UI.RawUI.WindowSize.Width
     $blockPaddingValue = [math]::Floor(($consoleWidth - $fixedMenuWidth) / 2)
@@ -480,29 +510,33 @@ function Show-Menu {
     $blockPaddingString = " " * $blockPaddingValue
 
     foreach ($lineEntry in $menuLines) {
-        if ($lineEntry.TrimStart() -eq $pssText -or
-            $lineEntry.TrimStart() -like ("=" * $lineEntry.TrimStart().Length) -or
-            $lineEntry.TrimStart() -eq $programHeader -or
-            $lineEntry.TrimStart() -eq $optionsHeader -or
-            ($lineEntry.Replace("-", "").Trim().Length -eq 0 -and $lineEntry.Trim().Length -gt 0)) {
+        $trimmedEntry = $lineEntry.TrimStart()
+        if ($trimmedEntry -eq $pssText -or
+            $trimmedEntry -like ("=" * $trimmedEntry.Length) -or
+            $trimmedEntry -eq $programHeader -or
+            $trimmedEntry -eq $optionsHeader -or
+            ($lineEntry.Replace("-", "").Trim().Length -eq 0 -and $trimmedEntry.Length -gt 0)) {
             Write-Host ($blockPaddingString + $lineEntry) -ForegroundColor Cyan
-        } elseif ($lineEntry.TrimStart() -match "^\[(a|g|w|n|e|u|c)\]") { # Added 'c'
+        } elseif ($trimmedEntry -match "^\[([aegnuwcx])\]") { # Added 'x'
             $fullLineWithoutBlockPadding = $lineEntry
             $leadingSpacesMatch = $fullLineWithoutBlockPadding | Select-String -Pattern "\S"
             $leadingSpaces = 0
             if ($leadingSpacesMatch) { $leadingSpaces = $leadingSpacesMatch.Matches[0].Index }
             $trimmedLineForColor = $fullLineWithoutBlockPadding.Substring($leadingSpaces)
+            
             Write-Host ($blockPaddingString + (" " * $leadingSpaces) + "[") -NoNewline
             $letter = $Matches[1]
-            $restOfLine = $trimmedLineForColor.Substring(3)
+            $restOfLine = $trimmedLineForColor.Substring(3) # Assuming format [L] Text
+            
             switch ($letter) {
-                "a" { Write-Host $letter -ForegroundColor Green -NoNewline }
+                "a" { Write-Host $letter -ForegroundColor DarkGreen -NoNewline } # Изменено на DarkGreen для уникального цвета
                 "g" { Write-Host $letter -ForegroundColor Yellow -NoNewline }
                 "u" { Write-Host $letter -ForegroundColor DarkRed -NoNewline } 
-                "c" { Write-Host $letter -ForegroundColor Blue -NoNewline } # MODIFIED Color for Custom
-                "w" { Write-Host $letter -ForegroundColor Magenta -NoNewline }
-                "n" { Write-Host $letter -ForegroundColor DarkCyan -NoNewline }
-                "e" { Write-Host $letter -ForegroundColor Red -NoNewline }
+                "c" { Write-Host $letter -ForegroundColor Blue -NoNewline }
+                "x" { Write-Host $letter -ForegroundColor Green -NoNewline } 
+                "w" { Write-Host $letter -ForegroundColor White -NoNewline }
+                "n" { Write-Host $letter -ForegroundColor Cyan -NoNewline }
+                "e" { Write-Host $letter -ForegroundColor DarkCyan -NoNewline }
                 default { Write-Host $letter -ForegroundColor White -NoNewline }
             }
             Write-Host "]" -NoNewline
@@ -513,25 +547,12 @@ function Show-Menu {
     }
     Write-Host "" 
 
-    $dynamicPromptTextSingleLine = "Enter option 'A-E', single number '1', or list of numbers '1 5 17':" # Updated prompt
-    if ($dynamicPromptTextSingleLine.Length -gt ($fixedMenuWidth - 4)) {
-        $promptLine1Text = "Enter option 'A-E', single number '1'," # Updated
-        $promptLine2Text = "or list of numbers '1 5 17':"
-        $promptPadding1 = [math]::Floor(($fixedMenuWidth - $promptLine1Text.Length) / 2)
-        if ($promptPadding1 -lt 0) { $promptPadding1 = 0 }
-        $centeredPromptLine1 = (" " * $promptPadding1) + $promptLine1Text
-        $promptPadding2 = [math]::Floor(($fixedMenuWidth - $promptLine2Text.Length) / 2)
-        if ($promptPadding2 -lt 0) { $promptPadding2 = 0 }
-        $centeredPromptLine2 = (" " * $promptPadding2) + $promptLine2Text
-        Write-Host ($blockPaddingString + $centeredPromptLine1) -ForegroundColor Yellow
-        Write-Host ($blockPaddingString + $centeredPromptLine2) -NoNewline -ForegroundColor Yellow
-    } else {
-        $promptTextForOneLine = $dynamicPromptTextSingleLine
-        $promptPaddingOneLine = [math]::Floor(($fixedMenuWidth - $promptTextForOneLine.Length) / 2)
-        if ($promptPaddingOneLine -lt 0) { $promptPaddingOneLine = 0 }
-        $centeredPromptOneLine = (" " * $promptPaddingOneLine) + $promptTextForOneLine
-        Write-Host ($blockPaddingString + $centeredPromptOneLine) -NoNewline -ForegroundColor Yellow
-    }
+    # Modified prompt text to remove the example part
+    $promptTextForOneLine = "Enter option, single number, or list of numbers:"
+    $promptPaddingOneLine = [math]::Floor(($fixedMenuWidth - $promptTextForOneLine.Length) / 2)
+    if ($promptPaddingOneLine -lt 0) { $promptPaddingOneLine = 0 }
+    $centeredPromptOneLine = (" " * $promptPaddingOneLine) + $promptTextForOneLine
+    Write-Host ($blockPaddingString + $centeredPromptOneLine) -NoNewline -ForegroundColor Yellow
 }
 #endregion
 
@@ -543,9 +564,20 @@ try {
             Write-LogAndHost "ERROR: Chocolatey is required to proceed. Exiting script." -HostColor Red
             exit 1
         }
+        # Re-check after install attempt
         if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-            Write-LogAndHost "ERROR: Chocolatey command still not found after installation attempt." -HostColor Red
+            Write-LogAndHost "ERROR: Chocolatey command (choco) still not found after installation attempt. Please install Chocolatey manually and re-run." -HostColor Red
             exit 1
+        }
+         # Set ChocolateyInstall environment variable if not set (common after fresh install)
+        if (-not $env:ChocolateyInstall) {
+            $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey"
+            Write-LogAndHost "ChocolateyInstall environment variable set to: $env:ChocolateyInstall" -NoHost
+        }
+    } else {
+         if (-not $env:ChocolateyInstall) {
+            $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey" # Or try to get it from choco path
+            Write-LogAndHost "ChocolateyInstall environment variable set to: $env:ChocolateyInstall" -NoHost
         }
     }
     $chocoVersion = & choco --version 2>&1
@@ -553,7 +585,7 @@ try {
         Write-LogAndHost "ERROR: Chocolatey is not installed or not functioning correctly. Exit code: $LASTEXITCODE" -HostColor Red
         exit 1
     }
-    Write-LogAndHost "Found Chocolatey version: $chocoVersion"
+    Write-LogAndHost "Found Chocolatey version: $($chocoVersion -join ' ')"
 }
 catch {
     Write-LogAndHost "ERROR: Exception occurred while checking Chocolatey. $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during Chocolatey check - "
@@ -562,9 +594,9 @@ catch {
 Write-Host ""
 Write-LogAndHost "Clearing Chocolatey cache..."
 try {
-    & choco cache remove --all 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8 # Added --all to clear all types of cache
+    & choco cache remove --all 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8 
     if ($LASTEXITCODE -eq 0) { Write-LogAndHost "Cache cleared." }
-    else { Write-LogAndHost "ERROR: Failed to clear Chocolatey cache." -HostColor Red }
+    else { Write-LogAndHost "WARNING: Failed to clear Chocolatey cache. $($LASTEXITCODE)" -HostColor Yellow }
 }
 catch { Write-LogAndHost "ERROR: Exception occurred while clearing Chocolatey cache. $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during cache clearing - " }
 Write-Host ""
@@ -572,7 +604,7 @@ Write-LogAndHost "Enabling automatic confirmation..."
 try {
     & choco feature enable -n allowGlobalConfirmation 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
     if ($LASTEXITCODE -eq 0) { Write-LogAndHost "Automatic confirmation enabled." }
-    else { Write-LogAndHost "ERROR: Failed to enable automatic confirmation." -HostColor Red }
+    else { Write-LogAndHost "WARNING: Failed to enable automatic confirmation. $($LASTEXITCODE)" -HostColor Yellow }
 }
 catch { Write-LogAndHost "ERROR: Exception occurred while enabling automatic confirmation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during enabling automatic confirmation - " }
 Write-Host ""
@@ -598,13 +630,15 @@ do {
         continue 
     }
 
-    if ($userInput -and $userInput -notmatch '^[aegnuwc0-9\s,]+$') { # Added 'c' to regex
+    # Validate user input against allowed characters (main menu letters, numbers, spaces, commas)
+    if ($userInput -and $userInput -notmatch "^[aegnuwcx0-9\s,]+$") { # Added 'x' to regex for Spotify Activation
         Clear-Host
-        Write-LogAndHost "Invalid input: '$userInput'. Use only letters [A,G,U,C,W,N,E], numbers [1-$($script:sortedPrograms.Count)], spaces, or commas." -HostColor Red -LogPrefix "Invalid user input: '$userInput' - contains invalid characters."
+        Write-LogAndHost "Invalid input: '$userInput'. Use options [A,G,U,C,X,W,N,E] or program numbers." -HostColor Red -LogPrefix "Invalid user input: '$userInput' - contains invalid characters."
         Start-Sleep -Seconds 2
         continue
     }
 
+    # Handle main menu letter options
     if ($script:mainMenuLetters -contains $userInput) {
         switch ($userInput) {
             'e' {
@@ -618,7 +652,7 @@ do {
                 Write-Host ""
                 Write-LogAndHost "Checking installed programs..."
                 try {
-                    & choco list 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+                    & choco list --localonly 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8 # Use --localonly for installed
                     if ($LASTEXITCODE -eq 0) { Write-LogAndHost "Installed programs list (at exit) saved to $($script:logFile)" }
                 } catch { Write-LogAndHost "ERROR: Exception during listing installed programs - $($_.Exception.Message)" -HostColor Red }
                 Write-Host ""
@@ -637,9 +671,9 @@ do {
                 if ($confirmInput.Trim().ToLower() -eq 'y') {
                     Write-LogAndHost "User chose to install all programs." -NoHost
                     Clear-Host
-                    if (Install-Programs -ProgramsToInstall $script:sortedPrograms) { Write-LogAndHost "All programs installed successfully. Perdanga Forever." }
-                    else { Write-LogAndHost "Some programs may not have installed correctly. Check log: $($script:logFile)" -HostColor Yellow }
-                    Write-Host ""
+                    if (Install-Programs -ProgramsToInstall $script:sortedPrograms) { Write-LogAndHost "All programs installation process completed. Perdanga Forever." }
+                    else { Write-LogAndHost "Some programs may not have installed correctly. Check log: $(Split-Path -Leaf $script:logFile)" -HostColor Yellow }
+                    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
                 } else { Write-LogAndHost "Installation of all programs cancelled." }
             }
             'g' { 
@@ -658,9 +692,10 @@ do {
                     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
                         $selectedProgramsFromGui = @(); for ($i = 0; $i -lt $checkboxes.Length; $i++) { if ($checkboxes[$i].Checked) { $selectedProgramsFromGui += $script:sortedPrograms[$i] } }
                         if ($selectedProgramsFromGui.Count -eq 0) { Write-LogAndHost "No programs selected via GUI for installation." }
-                        else { Clear-Host; if (Install-Programs -ProgramsToInstall $selectedProgramsFromGui) { Write-LogAndHost "Selected programs installed. Perdanga Forever." } else { Write-LogAndHost "Some GUI selected programs failed to install." -HostColor Yellow } }
+                        else { Clear-Host; if (Install-Programs -ProgramsToInstall $selectedProgramsFromGui) { Write-LogAndHost "Selected programs installation process completed. Perdanga Forever." } else { Write-LogAndHost "Some GUI selected programs failed to install." -HostColor Yellow } }
+                        Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
                     } else { Write-LogAndHost "GUI installation cancelled by user." }
-                } else { Clear-Host; Write-LogAndHost "ERROR: GUI selection (g) is not available." -HostColor Red }
+                } else { Clear-Host; Write-LogAndHost "ERROR: GUI selection (g) is not available." -HostColor Red; Start-Sleep -Seconds 2; }
             }
             'u' { 
                 if ($script:guiAvailable) {
@@ -679,9 +714,10 @@ do {
                     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
                         $selectedProgramsToUninstall = @(); foreach ($cb in $checkboxes) { if ($cb.Checked) { $selectedProgramsToUninstall += $cb.Text } }
                         if ($selectedProgramsToUninstall.Count -eq 0) { Write-LogAndHost "No programs selected via GUI for uninstallation." }
-                        else { Clear-Host; if (Uninstall-Programs -ProgramsToUninstall $selectedProgramsToUninstall) { Write-LogAndHost "Selected programs uninstalled. Perdanga Forever." } else { Write-LogAndHost "Some GUI selected programs failed to uninstall." -HostColor Yellow } }
+                        else { Clear-Host; if (Uninstall-Programs -ProgramsToUninstall $selectedProgramsToUninstall) { Write-LogAndHost "Selected programs uninstallation process completed. Perdanga Forever." } else { Write-LogAndHost "Some GUI selected programs failed to uninstall." -HostColor Yellow } }
+                        Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
                     } else { Write-LogAndHost "GUI uninstallation cancelled by user." }
-                } else { Clear-Host; Write-LogAndHost "ERROR: GUI uninstallation (u) is not available." -HostColor Red }
+                } else { Clear-Host; Write-LogAndHost "ERROR: GUI uninstallation (u) is not available." -HostColor Red; Start-Sleep -Seconds 2; }
             }
             'c' { # Install Custom Package
                 Clear-Host
@@ -711,16 +747,16 @@ do {
                             Write-LogAndHost "User confirmed installation of custom package '$customPackageName'." -NoHost
                             Clear-Host
                             if (Install-Programs -ProgramsToInstall @($customPackageName)) {
-                                Write-LogAndHost "Custom package '$customPackageName' installed successfully. Perdanga Forever."
+                                Write-LogAndHost "Custom package '$customPackageName' installation process completed. Perdanga Forever."
                             } else {
-                                Write-LogAndHost "Failed to install custom package '$customPackageName'. Check log: $($script:logFile)" -HostColor Red
+                                Write-LogAndHost "Failed to install custom package '$customPackageName'. Check log: $(Split-Path -Leaf $script:logFile)" -HostColor Red
                             }
                         } else {
                             Write-LogAndHost "Installation of custom package '$customPackageName' cancelled by user." -HostColor Yellow
                         }
                     } catch {
                          Write-LogAndHost "ERROR: Could not read user input for custom package installation confirmation. $($_.Exception.Message)" -HostColor Red
-                         Start-Sleep -Seconds 2
+                         Start-Sleep -Seconds 2 # Give user time to see error
                     }
                 } else {
                     # Test-ChocolateyPackage already logs details of why it failed (not found, error, etc.)
@@ -729,29 +765,50 @@ do {
                 Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
                 $null = Read-Host
             }
-            'w' { Clear-Host; Invoke-WindowsActivation; Write-LogAndHost "User chose to activate Windows." -NoHost }
-            'n' {
+            'x' { # Spotify Activation (formerly SpotX Enhancement)
+                Clear-Host
+                Invoke-SpotXActivation
+                Write-LogAndHost "User chose Spotify Activation." -NoHost
+                # Invoke-SpotXActivation already has a Read-Host at the end
+            }
+            'w' { 
+                Clear-Host; 
+                Invoke-WindowsActivation; 
+                Write-LogAndHost "User chose to activate Windows." -NoHost 
+                # Invoke-WindowsActivation already has a Read-Host at the end
+            }
+            'n' { # Update Windows (formerly Combined Update Windows & Update All Programs)
                 Clear-Host
                 try {
-                    Write-LogAndHost "Are you sure you want to update Windows? (Type y/n then press Enter)" -HostColor Yellow -NoLog
+                    Write-LogAndHost "This option will check for and install Windows Updates." -HostColor Yellow # Updated text
+                    Write-LogAndHost "Are you sure you want to proceed? (Type y/n then press Enter)" -HostColor Yellow -NoLog
                     $confirmInput = Read-Host
                 } catch { Write-LogAndHost "ERROR: Could not read user input. $($_.Exception.Message)" -HostColor Red; Start-Sleep -Seconds 2; continue }
-                if ($confirmInput.Trim().ToLower() -eq 'y') { Clear-Host; Invoke-WindowsUpdate; Write-LogAndHost "User chose to update Windows." -NoHost }
-                else { Write-LogAndHost "Windows update cancelled." }
+                
+                if ($confirmInput.Trim().ToLower() -eq 'y') {
+                    Write-LogAndHost "User chose to update Windows." -NoHost # Updated text
+                    Clear-Host
+                    Invoke-WindowsUpdate # This function has its own Read-Host
+                    Write-LogAndHost "Windows Update process finished." # Updated text
+                }
+                else { Write-LogAndHost "Update process cancelled." }
             }
         }
     }
+    # Handle multiple program installations via comma-separated numbers
     elseif ($userInput -match '[, ]+') { 
         Clear-Host
-        $selectedIndividualInputs = $userInput -split '[, ]+' | ForEach-Object { $_.Trim() }
+        $selectedIndividualInputs = $userInput -split '[, ]+' | ForEach-Object { $_.Trim() } | Where-Object {$_ -ne ""}
         $validProgramNamesToInstall = New-Object System.Collections.Generic.List[string]
         $invalidNumbersInList = New-Object System.Collections.Generic.List[string]
+        
         foreach ($inputNumStr in $selectedIndividualInputs) {
             if ($inputNumStr -match '^\d+$' -and $script:numberToProgramMap.ContainsKey($inputNumStr)) {
                 $programName = $script:numberToProgramMap[$inputNumStr]
                 if (-not $validProgramNamesToInstall.Contains($programName)) { $validProgramNamesToInstall.Add($programName) }
             } elseif ($inputNumStr -ne "") { $invalidNumbersInList.Add($inputNumStr) }
         }
+        
         if ($validProgramNamesToInstall.Count -eq 0) {
             Write-LogAndHost "No valid program numbers found in your input: '$userInput'." -HostColor Red
             if ($invalidNumbersInList.Count -gt 0) { Write-LogAndHost "Unrecognized inputs: $($invalidNumbersInList -join ', ')" -HostColor Red -NoLog }
@@ -763,13 +820,16 @@ do {
                 Write-LogAndHost "Install these $($validProgramNamesToInstall.Count) program(s)? (Type y/n then press Enter)" -HostColor Yellow -NoLog
                 $confirmMultiInput = Read-Host
             } catch { Write-LogAndHost "ERROR: Could not read user input. $($_.Exception.Message)" -HostColor Red; Start-Sleep -Seconds 2; continue }
+            
             if ($confirmMultiInput.Trim().ToLower() -eq 'y') {
                 Clear-Host
-                if (Install-Programs -ProgramsToInstall $validProgramNamesToInstall) { Write-LogAndHost "Selected programs installed. Perdanga Forever." }
-                else { Write-LogAndHost "Some selected programs failed. Check log: $($script:logFile)" -HostColor Yellow }
+                if (Install-Programs -ProgramsToInstall $validProgramNamesToInstall) { Write-LogAndHost "Selected programs installation process completed. Perdanga Forever." }
+                else { Write-LogAndHost "Some selected programs failed. Check log: $(Split-Path -Leaf $script:logFile)" -HostColor Yellow }
+                Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
             } else { Write-LogAndHost "Installation of selected programs cancelled." }
         }
     }
+    # Handle single program installation via number
     elseif ($script:numberToProgramMap.ContainsKey($userInput)) { 
         $programToInstall = $script:numberToProgramMap[$userInput]
         Clear-Host
@@ -777,15 +837,18 @@ do {
             Write-LogAndHost "Install '$($programToInstall)' (program #$($userInput))? (Type y/n then press Enter)" -HostColor Yellow -NoLog
             $confirmSingleInput = Read-Host
         } catch { Write-LogAndHost "ERROR: Could not read user input. $($_.Exception.Message)" -HostColor Red; Start-Sleep -Seconds 2; continue }
+        
         if ($confirmSingleInput.Trim().ToLower() -eq 'y') {
             Clear-Host
-            if (Install-Programs -ProgramsToInstall @($programToInstall)) { Write-LogAndHost "$($programToInstall) installed. Perdanga Forever." }
-            else { Write-LogAndHost "Failed to install $($programToInstall). Check log: $($script:logFile)" -HostColor Red }
+            if (Install-Programs -ProgramsToInstall @($programToInstall)) { Write-LogAndHost "$($programToInstall) installation process completed. Perdanga Forever." }
+            else { Write-LogAndHost "Failed to install $($programToInstall). Check log: $(Split-Path -Leaf $script:logFile)" -HostColor Red }
+            Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
         } else { Write-LogAndHost "Installation of '$($programToInstall)' cancelled." }
     }
+    # Handle invalid input
     else {
         Clear-Host
-        Write-LogAndHost "Invalid selection: '$($userInput)'. Use options [A,G,U,C,W,N,E] or program numbers." -HostColor Red # Updated message
+        Write-LogAndHost "Invalid selection: '$($userInput)'. Use options [A,G,U,C,X,W,N,E] or program numbers." -HostColor Red # Updated message
         Start-Sleep -Seconds 2
     }
 } while ($true)
