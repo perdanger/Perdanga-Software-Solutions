@@ -1,25 +1,22 @@
 # Perdanga Software Solutions
 
 ## Overview
-![image alt](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/PerdangaSoftwareSolutions.png?raw=true)
 
-Perdanga Software Solutions is a powerful and easy-to-use PowerShell script designed to automate the installation of essential Windows software using Chocolatey. It also provides convenient options for managing Windows updates and activation, all through an intuitive command-line interface and an optional graphical user interface.
+![image alt](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/PerdangaSoftwareSolutions.png?raw=true)Perdanga Software Solutions is a powerful and easy-to-use PowerShell script designed to automate the installation, uninstallation, and management of essential Windows software using Chocolatey. It also provides convenient options for managing Windows updates and activation, all through an intuitive command-line interface and an optional graphical user interface.
 
 The scripts consist of:
 
 - `RunPerdangaSoftwareSolutions.bat`: A batch script that verifies administrative privileges and launches the PowerShell script.
-- `PerdangaSoftwareSolutions.ps1`: The core PowerShell script that manages software installation, Windows updates, and activation.
+- `PerdangaSoftwareSolutions.ps1`: The core PowerShell script that manages software installation, uninstallation, Windows updates, and activation.
 
 ## Features
 
 - **Automated Software Installation**: Install a curated list of essential Windows programs via Chocolatey.
-- **Dual Interface**: Choose between a command-line interface or a graphical user interface for program selection (GUI availability depends on system configuration).
+- **Custom Package Installation**: Install any Chocolatey package by specifying its exact package ID.
+- **Program Uninstallation**: Uninstall Chocolatey-installed programs via a graphical interface.
+- **Dual Interface**: Choose between a command-line interface or a graphical user interface for program selection and uninstallation (GUI availability depends on system configuration).
 - **Windows Updates**: Check and install Windows updates using the PSWindowsUpdate module.
-- **Windows Activation**: Optional activation using an external script 
-
-  ```powershell
-  https://get.activated.win
-  ```
+- **Windows Activation**: Optional activation using an external script from `https://get.activated.win`.
 - **Detailed Logging**: Logs all actions to a timestamped file for easy troubleshooting.
 - **Robust Error Handling**: Includes checks for PowerShell version, administrative privileges, and Chocolatey installation.
 
@@ -29,7 +26,9 @@ The script automates the installation of the following essential software via Ch
 
 - 7zip.install
 - brave
+- discord
 - file-converter
+- git
 - googlechrome
 - gpu-z
 - hwmonitor
@@ -69,32 +68,20 @@ The script automates the installation of the following essential software via Ch
 
 1. **Main Menu**:
 
-- The script presents an intuitive menu with the following options:
-
-
-- **\[A\] Install All Programs**: Install all listed programs.
-- **\[G\] Select Specific Programs via GUI**
-- **\[W\] Activate Windows**: Run an external Windows activation script.
-- **\[N\] Update Windows**: Check and install Windows updates.
-- **\[E\] Exit Script**: Exit the program.
-
-
-- Alternatively, enter program numbers (e.g., `1`, `1 5 17`, or `1,5,17`) to install specific programs.
-
-1. **Program Selection**:
-
-   - **Single Program**: Enter a number (e.g., `1`) to install one program.
-   - **Multiple Programs**: Enter numbers separated by spaces or commas (e.g., `1 5 17` or `1,5,17`).
-   - **GUI Selection**: Choose option `G` to select programs via checkboxes.
-
-2. **Logs**:
-
-   - All actions are logged to `install_log_YYYYMMDD_HHMMSS.txt` in the script directory.
+   - The script presents an intuitive menu with the following options:
+     - **\[A\] Install All Programs**
+     - **\[G\] Select Specific Programs via GUI**
+     - **\[U\] Uninstall Programs via GUI**
+     - **\[C\] Install Custom Package**
+     - **\[W\] Activate Windows**
+     - **\[N\] Update Windows**
+     - **\[E\] Exit Script**
+   - Alternatively, enter program numbers (e.g., '`1`' '`1 5 17'`, or '`1,5,17'`) to install specific programs from the predefined list.
 
 ## Troubleshooting
 
 - **Script Fails to Run**: Ensure `RunPerdangaSoftwareSolutions.bat` is run as Administrator.
 - **PowerShell Version Error**: Upgrade to PowerShell 5 or higher.
-- **Chocolatey Installation Fails**: Verify your internet connection and access to `https://chocolatey.org/install.ps1`.
-- **GUI Unavailable**: If option `G` fails, your system may lack `System.Windows.Forms`. Use CLI options instead.
+- **GUI Unavailable**: If options `G` or `U` fail, your system may lack `System.Windows.Forms`. Use CLI options instead.
+- **Package Not Found**: For option `C`, ensure the entered package ID is valid and exists in the Chocolatey repository.
 - **Check Logs**: Review `install_log_YYYYMMDD_HHMMSS.txt` for detailed error messages.
