@@ -18,7 +18,6 @@ if ([string]::IsNullOrEmpty($scriptDir)) {
     $scriptDir = $env:TEMP
 }
 $script:logFile = Join-Path -Path $scriptDir -ChildPath "install_log_$timestamp.txt"
-# --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
 
 # Function to write messages to console and log file
