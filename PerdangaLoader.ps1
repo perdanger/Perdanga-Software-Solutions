@@ -10,8 +10,6 @@
     This script should not be run directly.
 #>
 
-# --- ИСПРАВЛЕНИЕ: Блок инициализации лог-файла перемещен сюда, в начало ---
-# Это гарантирует, что переменная $script:logFile будет доступна для всех последующих вызовов функций.
 # Set log file name with timestamp and use script directory
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 # When run from `irm | iex`, $PSScriptRoot is not available. Default to a temp path.
@@ -20,7 +18,6 @@ if ([string]::IsNullOrEmpty($scriptDir)) {
     $scriptDir = $env:TEMP
 }
 $script:logFile = Join-Path -Path $scriptDir -ChildPath "install_log_$timestamp.txt"
-# --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
 
 # Function to write messages to console and log file
