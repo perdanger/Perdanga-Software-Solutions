@@ -10,8 +10,6 @@
     This script should not be run directly.
 #>
 
-# --- ИСПРАВЛЕНИЕ: Блок инициализации лог-файла перемещен сюда, в начало ---
-# Это гарантирует, что переменная $script:logFile будет доступна для всех последующих вызовов функций.
 # Set log file name with timestamp and use script directory
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 # When run from `irm | iex`, $PSScriptRoot is not available. Default to a temp path.
@@ -187,7 +185,6 @@ function Invoke-SpotXActivation {
 # Function to perform Windows update
 function Invoke-WindowsUpdate {
     Write-LogAndHost "Checking for Windows updates..."
-    # ИСПРАВЛЕНИЕ: Устанавливаем политику выполнения для текущего процесса, чтобы разрешить импорт модуля
     Set-ExecutionPolicy Bypass -Scope Process -Force
     try {
         if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
