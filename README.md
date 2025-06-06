@@ -1,17 +1,16 @@
 # Perdanga Software Solutions
 
-![image alt](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/1.3.png?raw=true)
-
-## Overview
+![image alt](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/1.3.png?raw=true)## Overview
 
 Perdanga Software Solutions is a powerful and easy-to-use PowerShell script designed to automate the installation, uninstallation, and management of essential Windows software.
 
-The scripts consist of:
+1. **PowerShell Launch**:
+   - Run the following command in PowerShell as an Administrator:
 
-- `RunPerdangaSoftwareSolutions.bat`: A batch script that verifies administrative privileges and launches the PowerShell script.
-- `PerdangaSoftwareSolutions.ps1`: The core PowerShell script that manages software installation, uninstallation, Windows updates, Windows activation, Spotify activation, and telemetry control.
-- `config.ps1`: Contains user-configurable settings, such as the program list.
-- `functions.ps1`: Defines helper functions used by the main script.
+     ```
+     irm https://raw.githubusercontent.com/perdanger/Perdanga-Software-Solutions/main/PerdangaLoader.ps1 | iex
+     ```
+   - This method downloads and executes the PerdangaLoader.ps1 script directly from the repository to initiate the setup.
 
 ## Features
 
@@ -52,13 +51,6 @@ The script automates the installation of the following essential software via Ch
 - winrar
 - wiztree
 
-## Setup Instructions
-
-1. **Run as Administrator**:
-   - Right-click `RunPerdangaSoftwareSolutions.bat` and select **Run as Administrator** to ensure proper permissions.
-2. **Install Chocolatey**:
-   - If Chocolatey is not installed, the script will prompt for automatic installation.
-
 ## Usage
 
 1. **Main Menu**:
@@ -76,7 +68,7 @@ The script automates the installation of the following essential software via Ch
 
 ## Troubleshooting
 
-- **Script Fails to Run**: Ensure `RunPerdangaSoftwareSolutions.bat` is run as Administrator.
+- **Script Fails to Run**: Ensure `RunPerdangaSoftwareSolutions.bat` is run as Administrator or the PowerShell command is executed with administrative privileges.
 - **PowerShell Version Error**: Upgrade to PowerShell 5 or higher.
 - **GUI Unavailable**: If options `G` or `U` fail, your system may lack `System.Windows.Forms`. Use CLI options instead.
 - **Package Not Found**: For option `C`, ensure the entered package ID is valid and exists in the Chocolatey repository.
