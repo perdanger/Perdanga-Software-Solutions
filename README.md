@@ -56,9 +56,7 @@ The script automates the installation of the following essential software via Ch
 
 1. **Run as Administrator**:
    - Right-click `RunPerdangaSoftwareSolutions.bat` and select **Run as Administrator** to ensure proper permissions.
-2. **Verify PowerShell**:
-   - The script checks for PowerShell. If missing, download it from Microsoft's official site.
-3. **Install Chocolatey**:
+2. **Install Chocolatey**:
    - If Chocolatey is not installed, the script will prompt for automatic installation.
 
 ## Usage
