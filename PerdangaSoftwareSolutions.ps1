@@ -7,10 +7,8 @@
     files, performs initial checks, initializes Chocolatey, and then enters the main user interaction loop.
 
 .NOTES
-    Author: Your Name
+    Author: Roman Zhdanov
     Version: 1.3 (Telemetry Control)
-    Requires: PowerShell, Administrator privileges.
-    Dependencies: config.ps1, functions.ps1 (must be in the same directory).
 #>
 
 # --- INITIAL SETUP ---
