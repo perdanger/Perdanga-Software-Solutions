@@ -10,19 +10,6 @@
     This script should not be run directly.
 #>
 
-# --- ИСПРАВЛЕНИЕ: Блок инициализации лог-файла перемещен сюда, в начало ---
-# Это гарантирует, что переменная $script:logFile будет доступна для всех последующих вызовов функций.
-# Set log file name with timestamp and use script directory
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-# When run from `irm | iex`, $PSScriptRoot is not available. Default to a temp path.
-$scriptDir = $PSScriptRoot
-if ([string]::IsNullOrEmpty($scriptDir)) {
-    $scriptDir = $env:TEMP
-}
-$script:logFile = Join-Path -Path $scriptDir -ChildPath "install_log_$timestamp.txt"
-# --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-
-
 # Function to write messages to console and log file
 function Write-LogAndHost {
     param (
@@ -35,7 +22,6 @@ function Write-LogAndHost {
     )
     $fullLogMessage = "[$((Get-Date))] $LogPrefix$Message"
     if (-not $NoLog) {
-        # Теперь эта строка будет работать корректно с самого начала
         $fullLogMessage | Out-File -FilePath $script:logFile -Append -Encoding UTF8
     }
     if (-not $NoHost) {
@@ -187,8 +173,6 @@ function Invoke-SpotXActivation {
 # Function to perform Windows update
 function Invoke-WindowsUpdate {
     Write-LogAndHost "Checking for Windows updates..."
-    # ИСПРАВЛЕНИЕ: Устанавливаем политику выполнения для текущего процесса, чтобы разрешить импорт модуля
-    Set-ExecutionPolicy Bypass -Scope Process -Force
     try {
         if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
             Write-LogAndHost "PSWindowsUpdate module not found. Installing..."
@@ -703,6 +687,16 @@ try {
     Write-Host "WARNING: Could not set console buffer or window size. This may happen in some environments (e.g., VS Code integrated terminal)." -ForegroundColor Yellow
     Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor DarkYellow
 }
+
+# Set log file name with timestamp and use script directory
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+# When run from `irm | iex`, $PSScriptRoot is not available. Default to a temp path.
+$scriptDir = $PSScriptRoot
+if ([string]::IsNullOrEmpty($scriptDir)) {
+    $scriptDir = $env:TEMP
+}
+$script:logFile = Join-Path -Path $scriptDir -ChildPath "install_log_$timestamp.txt"
+
 
 # --- SCRIPT-WIDE CHECKS ---
 # Define a variable to track whether activation was attempted
