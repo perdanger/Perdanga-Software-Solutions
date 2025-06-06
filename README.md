@@ -4,7 +4,7 @@
 
 ## Overview
 
-Perdanga Software Solutions is a powerful and easy-to-use PowerShell script designed to automate the installation, uninstallation, and management of essential Windows software using. It provides CLI and GUI interfaces for managing Software and Windows.
+Perdanga Software Solutions is a powerful and easy-to-use PowerShell script designed to automate the installation, uninstallation, and management of essential Windows software.
 
 The scripts consist of:
 
