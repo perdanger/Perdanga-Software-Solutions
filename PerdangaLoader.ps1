@@ -1026,4 +1026,4 @@ do {
         Write-LogAndHost "Invalid selection: '$($userInput)'. Use options [A,G,U,C,T,X,W,N,E] or program numbers." -HostColor Red # Updated message
         Start-Sleep -Seconds 2
     }
-} while ($tr
+} while ($true)
