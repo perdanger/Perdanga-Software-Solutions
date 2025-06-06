@@ -184,6 +184,8 @@ function Invoke-SpotXActivation {
 # Function to perform Windows update
 function Invoke-WindowsUpdate {
     Write-LogAndHost "Checking for Windows updates..."
+    # ИСПРАВЛЕНИЕ: Устанавливаем политику выполнения для текущего процесса, чтобы разрешить импорт модуля
+    Set-ExecutionPolicy Bypass -Scope Process -Force
     try {
         if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
             Write-LogAndHost "PSWindowsUpdate module not found. Installing..."
@@ -1024,4 +1026,4 @@ do {
         Write-LogAndHost "Invalid selection: '$($userInput)'. Use options [A,G,U,C,T,X,W,N,E] or program numbers." -HostColor Red # Updated message
         Start-Sleep -Seconds 2
     }
-} while ($true)
+} while ($tr
