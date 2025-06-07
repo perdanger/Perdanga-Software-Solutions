@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    Functions library for Perdanga Software Solutions.
+    Author: Roman Zhdanov
+    Version: 1.3
 
 .DESCRIPTION
     This file contains all the helper functions used by the main script.
