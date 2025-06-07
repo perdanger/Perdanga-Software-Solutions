@@ -682,7 +682,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Set console buffer size, window size, and background color
 try {
-    $Host.UI.RawUI.BackgroundColor = 'DarkGreen'
+    $Host.UI.RawUI.BackgroundColor = 'DarkCyan'
     $Host.UI.RawUI.BufferSize = New-Object Management.Automation.Host.Size(150, 3000)
     $Host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(150, 50)
     Clear-Host # Clear the screen to apply the new background color immediately
