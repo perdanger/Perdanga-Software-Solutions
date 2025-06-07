@@ -30,9 +30,9 @@ function Write-LogAndHost {
         [switch]$NoHost,
         [switch]$NoNewline
     )
-    $fullLogMessage = "[$(Get-Date)] $LogPrefix$Message"
+    $fullLogMessage = "[$((Get-Date))] $LogPrefix$Message"
     if (-not $NoLog) {
-        # This line will now work correctly from the very beginning
+        # Теперь эта строка будет работать корректно с самого начала
         $fullLogMessage | Out-File -FilePath $script:logFile -Append -Encoding UTF8
     }
     if (-not $NoHost) {
@@ -115,7 +115,7 @@ function Invoke-WindowsActivation {
     $null = Read-Host
 }
 
-# Function to apply SpotX
+# Function to apply SpotX 
 function Invoke-SpotXActivation {
     Write-LogAndHost "Attempting Spotify Activation..." -HostColor Cyan
     Write-LogAndHost "INFO: This process modifies your Spotify client. It is recommended to close Spotify before proceeding." -HostColor Yellow
@@ -423,9 +423,8 @@ function Test-ChocolateyPackage {
 function Show-Menu {
     Clear-Host
 
-    # ASCII Art for the header
     $asciiArt = @(
-        "__/\\\\\\\\\\\\\_______________________________________/\\\____________________________________________________________",
+       "__/\\\\\\\\\\\\\_______________________________________/\\\____________________________________________________________",
         " _\/\\\/////////\\\____________________________________\/\\\____________________________________________________________",
         "  _\/\\\_______\/\\\____________________________________\/\\\_________________________________/\\\\\\\\__________________",
         "   _\/\\\\\\\\\\\\\/_____/\\\\\\\\___/\\/\\\\\\\_________\/\\\___/\\\\\\\\\_____/\\/\\\\\\____/\\\////\\\__/\\\\\\\\\_____",
@@ -445,7 +444,6 @@ function Show-Menu {
         "                 _\///_____________\/////_____\///____________\//////////______\///______\//////////____\///____________________________"
     )
 
-    # Print ASCII art in Cyan
     foreach ($line in $asciiArt) {
         Write-Host $line -ForegroundColor Cyan
     }
@@ -462,7 +460,7 @@ function Show-Menu {
     $menuLines.Add($pssUnderline)
     $menuLines.Add($centeredPssTextLine)
     $menuLines.Add($dashedLine)
-    $menuLines.Add(" Chocolatey Package Manager [PSS v1.3] ($(Get-Date -Format 'dd.MM.yyyy HH:mm'))") 
+    $menuLines.Add(" Chocolatey Package Manager [PSS v1.3] ($(Get-Date -Format "dd.MM.yyyy HH:mm"))") 
     $menuLines.Add(" Log saved to: $(Split-Path -Leaf $script:logFile)")
     $menuLines.Add(" $($script:sortedPrograms.Count) programs available for installation")
     $menuLines.Add($pssUnderline)
@@ -482,7 +480,6 @@ function Show-Menu {
         $formattedPrograms += "$($dispNumber). $($programName)"
     }
 
-    # Format programs into three columns
     $programColumns = @{ 0 = @(); 1 = @(); 2 = @() }
     $programsPerColumn = [math]::Ceiling($formattedPrograms.Count / 3.0) 
 
@@ -519,28 +516,42 @@ function Show-Menu {
     $menuLines.Add($centeredOptionsHeader)
     $menuLines.Add($optionsUnderline)
     
-    # Define options for two-column layout
+
+    # Define options in a structured way for proper alignment.
     $optionPairs = @(
         @{ Left = "[A] Install All Programs";              Right = "[W] Activate Windows" },
         @{ Left = "[G] Select Specific Programs via GUI";  Right = "[N] Update Windows" },
         @{ Left = "[U] Uninstall Programs via GUI";        Right = "[T] Disable Windows Telemetry" },
-        @{ Left = "[C] Install Custom Program";            Right = "[X] Activate Spotify" }
+        @{ Left = "[C] Install Custom Program";            Right = "" },
+        @{ Left = "[X] Activate Spotify";                  Right = "" }
     )
 
+    # Calculate the width for the first column to ensure all options align vertically.
+    # This is based on the longest string in the left column, plus some padding.
     $column1Width = ($optionPairs.Left | Measure-Object -Property Length -Maximum).Maximum + 5
 
+    # Build and add each option line to the menu array.
     foreach ($pair in $optionPairs) {
+        # Pad the left item to the calculated width to align the second column.
         $leftColumn = $pair.Left.PadRight($column1Width)
+        # Combine the columns into one line.
         $fullLine = "{0}{1}" -f $leftColumn, $pair.Right
+        # Add the line to the menu with no extra indent to align with the start of the underline.
         $menuLines.Add($fullLine.TrimEnd())
     }
-    
+
+    # Add a blank line for visual separation.
     $menuLines.Add("")
+
+    # Center the 'Exit' option relative to the overall menu width for a clean look.
     $exitLine = "[E] Exit Script"
     $exitPadding = [math]::Floor(($fixedMenuWidth - $exitLine.Length) / 2)
     if ($exitPadding -lt 0) { $exitPadding = 0 }
     $centeredExitLine = (" " * $exitPadding) + $exitLine
     $menuLines.Add($centeredExitLine)
+
+    # --- END OF FIX ---
+    
     $menuLines.Add($optionsUnderline)
 
     $consoleWidth = $Host.UI.RawUI.WindowSize.Width
@@ -548,10 +559,8 @@ function Show-Menu {
     if ($blockPaddingValue -lt 0) { $blockPaddingValue = 0 }
     $blockPaddingString = " " * $blockPaddingValue
 
-    # Print menu with specified colors
     foreach ($lineEntry in $menuLines) {
         $trimmedEntry = $lineEntry.Trim()
-        # These specific lines will be Cyan
         if ($trimmedEntry -eq $pssText -or
             $trimmedEntry -like ($pssUnderline.Trim()) -or
             $trimmedEntry -like ($dashedLine.Trim()) -or
@@ -561,7 +570,6 @@ function Show-Menu {
             $trimmedEntry -like ($optionsUnderline.Trim())) {
             Write-Host ($blockPaddingString + $lineEntry) -ForegroundColor Cyan
         } else {
-            # All other lines will be White
             Write-Host ($blockPaddingString + $lineEntry) -ForegroundColor White
         }
     }
@@ -571,13 +579,12 @@ function Show-Menu {
     $promptPaddingOneLine = [math]::Floor(($fixedMenuWidth - $promptTextForOneLine.Length) / 2)
     if ($promptPaddingOneLine -lt 0) { $promptPaddingOneLine = 0 }
     $centeredPromptOneLine = (" " * $promptPaddingOneLine) + $promptTextForOneLine
-    
-    # Changed prompt color to White to match screenshot
-    Write-Host ($blockPaddingString + $centeredPromptOneLine) -NoNewline -ForegroundColor White
+    Write-Host ($blockPaddingString + $centeredPromptOneLine) -NoNewline -ForegroundColor Yellow
 }
 
 # Log that the functions library has been loaded successfully
 Write-LogAndHost "Functions library loaded." -NoHost
+
 
 <#
 .SYNOPSIS
@@ -597,9 +604,7 @@ Write-LogAndHost "Functions library loaded." -NoHost
 $programs = @(
     "7zip.install",
     "brave",
-    "discord",
     "file-converter",
-    "git",
     "googlechrome",
     "gpu-z",
     "hwmonitor",
@@ -615,7 +620,9 @@ $programs = @(
     "vcredist-all",
     "vlc",
     "winrar",
-    "wiztree"
+    "wiztree",
+    "discord",
+    "git"
 )
 
 # --- SCRIPT-WIDE VARIABLES ---
@@ -626,6 +633,7 @@ $programs = @(
 $script:sortedPrograms = $programs | Sort-Object
 
 # Define the letters for main menu commands
+# ADDED 't' for the new Telemetry option
 $script:mainMenuLetters = @('a', 'e', 'g', 'n', 'w', 'u', 'c', 'x', 't')
 
 # Generate numbers for program selection
@@ -656,6 +664,7 @@ for ($i = 0; $i -lt $script:sortedPrograms.Count; $i++) {
 # Log that the configuration has been loaded successfully
 Write-LogAndHost "Configuration loaded. $($script:sortedPrograms.Count) programs defined." -NoHost
 
+
 <#
 .SYNOPSIS
     Main script for Perdanga Software Solutions to install and manage programs using Chocolatey.
@@ -666,13 +675,15 @@ Write-LogAndHost "Configuration loaded. $($script:sortedPrograms.Count) programs
 
 .NOTES
     Author: Roman Zhdanov
-    Version: 1.3
+    Version: 1.3 (Telemetry Control)
 #>
 
 # --- INITIAL SETUP ---
 # Verify running in PowerShell
 if ($PSVersionTable.PSVersion -eq $null) {
     Write-Host "ERROR: This script must be run in PowerShell, not in Command Prompt." -ForegroundColor Red
+    Write-Host "Reason: The script uses PowerShell-specific cmdlets and features." -ForegroundColor Red
+    Write-Host "Solution: Run the script using RunPerdangaSoftwareSolutions.bat or directly in PowerShell." -ForegroundColor Yellow
     exit 1
 }
 
@@ -680,21 +691,17 @@ if ($PSVersionTable.PSVersion -eq $null) {
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Set console buffer size, window size, and background color
+# Set console buffer size and window size
 try {
-    # Setting the background color to a darker shade of DarkCyan using RGB values
-    # Original DarkCyan is often around RGB(0, 128, 128) or similar.
-    # We'll use a muted dark cyan, e.g., RGB(0, 64, 64) or similar.
-    # The hex equivalent for RGB(0, 64, 64) is #004040.
-    $Host.UI.RawUI.BackgroundColor = [System.Drawing.ColorTranslator]::FromHtml("#004040") 
     $Host.UI.RawUI.BufferSize = New-Object Management.Automation.Host.Size(150, 3000)
     $Host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(150, 50)
-    Clear-Host # Clear the screen to apply the new background color immediately
 } catch {
-    Write-Host "WARNING: Could not set console UI properties. Error: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "WARNING: Could not set console buffer or window size. This may happen in some environments (e.g., VS Code integrated terminal)." -ForegroundColor Yellow
+    Write-Host "Error details: $($_.Exception.Message)" -ForegroundColor DarkYellow
 }
 
 # --- SCRIPT-WIDE CHECKS ---
+# Define a variable to track whether activation was attempted
 $script:activationAttempted = $false
 
 # Check if running as Administrator
@@ -724,17 +731,19 @@ try {
             Write-LogAndHost "ERROR: Chocolatey is required to proceed. Exiting script." -HostColor Red
             exit 1
         }
+        # Re-check after install attempt
         if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
             Write-LogAndHost "ERROR: Chocolatey command (choco) still not found after installation attempt. Please install Chocolatey manually and re-run." -HostColor Red
             exit 1
         }
+         # Set ChocolateyInstall environment variable if not set (common after fresh install)
         if (-not $env:ChocolateyInstall) {
             $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey"
             Write-LogAndHost "ChocolateyInstall environment variable set to: $env:ChocolateyInstall" -NoHost
         }
     } else {
          if (-not $env:ChocolateyInstall) {
-            $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey"
+            $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey" # Or try to get it from choco path
             Write-LogAndHost "ChocolateyInstall environment variable set to: $env:ChocolateyInstall" -NoHost
         }
     }
@@ -788,6 +797,8 @@ do {
         continue 
     }
 
+    # Validate user input against allowed characters (main menu letters, numbers, spaces, commas)
+    # ADDED 't' to the regex for Telemetry option
     if ($userInput -and $userInput -notmatch "^[aegnuwcxt0-9\s,]+$") { 
         Clear-Host
         Write-LogAndHost "Invalid input: '$userInput'. Use options [A,G,U,C,T,X,W,N,E] or program numbers." -HostColor Red -LogPrefix "Invalid user input: '$userInput' - contains invalid characters."
@@ -809,7 +820,7 @@ do {
                 Write-Host ""
                 Write-LogAndHost "Checking installed programs..."
                 try {
-                    & choco list --localonly 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+                    & choco list --localonly 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8 # Use --localonly for installed
                     if ($LASTEXITCODE -eq 0) { Write-LogAndHost "Installed programs list (at exit) saved to $($script:logFile)" }
                 } catch { Write-LogAndHost "ERROR: Exception during listing installed programs - $($_.Exception.Message)" -HostColor Red }
                 Write-Host ""
@@ -913,42 +924,46 @@ do {
                         }
                     } catch {
                          Write-LogAndHost "ERROR: Could not read user input for custom package installation confirmation. $($_.Exception.Message)" -HostColor Red
-                         Start-Sleep -Seconds 2
+                         Start-Sleep -Seconds 2 # Give user time to see error
                     }
                 } else {
+                    # Test-ChocolateyPackage already logs details of why it failed (not found, error, etc.)
                     Write-LogAndHost "Custom package '$customPackageName' could not be installed (either not found or validation failed)." -HostColor Red
                 }
                 Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
                 $null = Read-Host
             }
-            't' {
+            't' { # ADDED: Disable Telemetry
                 Clear-Host
                 Write-LogAndHost "User chose to disable Telemetry." -NoHost
                 Invoke-DisableTelemetry
+                # Invoke-DisableTelemetry already has a Read-Host at the end
             }
-            'x' {
+            'x' { # Spotify Activation (formerly SpotX Enhancement)
                 Clear-Host
                 Write-LogAndHost "User chose Spotify Activation." -NoHost
                 Invoke-SpotXActivation
+                # Invoke-SpotXActivation already has a Read-Host at the end
             }
             'w' { 
-                Clear-Host
+                Clear-Host; 
                 Write-LogAndHost "User chose to activate Windows." -NoHost 
-                Invoke-WindowsActivation
+                Invoke-WindowsActivation; 
+                # Invoke-WindowsActivation already has a Read-Host at the end
             }
-            'n' {
+            'n' { # Update Windows (formerly Combined Update Windows & Update All Programs)
                 Clear-Host
                 try {
-                    Write-LogAndHost "This option will check for and install Windows Updates." -HostColor Yellow
+                    Write-LogAndHost "This option will check for and install Windows Updates." -HostColor Yellow # Updated text
                     Write-LogAndHost "Are you sure you want to proceed? (Type y/n then press Enter)" -HostColor Yellow -NoLog
                     $confirmInput = Read-Host
                 } catch { Write-LogAndHost "ERROR: Could not read user input. $($_.Exception.Message)" -HostColor Red; Start-Sleep -Seconds 2; continue }
                 
                 if ($confirmInput.Trim().ToLower() -eq 'y') {
-                    Write-LogAndHost "User chose to update Windows." -NoHost
+                    Write-LogAndHost "User chose to update Windows." -NoHost # Updated text
                     Clear-Host
-                    Invoke-WindowsUpdate
-                    Write-LogAndHost "Windows Update process finished."
+                    Invoke-WindowsUpdate # This function has its own Read-Host
+                    Write-LogAndHost "Windows Update process finished." # Updated text
                 }
                 else { Write-LogAndHost "Update process cancelled." }
             }
@@ -1007,7 +1022,7 @@ do {
     # Handle invalid input
     else {
         Clear-Host
-        Write-LogAndHost "Invalid selection: '$($userInput)'. Use options [A,G,U,C,T,X,W,N,E] or program numbers." -HostColor Red
+        Write-LogAndHost "Invalid selection: '$($userInput)'. Use options [A,G,U,C,T,X,W,N,E] or program numbers." -HostColor Red # Updated message
         Start-Sleep -Seconds 2
     }
 } while ($true)
