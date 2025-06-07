@@ -115,7 +115,7 @@ function Invoke-WindowsActivation {
     $null = Read-Host
 }
 
-# Function to apply SpotX 
+# Function to apply SpotX
 function Invoke-SpotXActivation {
     Write-LogAndHost "Attempting Spotify Activation..." -HostColor Cyan
     Write-LogAndHost "INFO: This process modifies your Spotify client. It is recommended to close Spotify before proceeding." -HostColor Yellow
@@ -682,7 +682,11 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Set console buffer size, window size, and background color
 try {
-    $Host.UI.RawUI.BackgroundColor = 'DarkCyan'
+    # Setting the background color to a darker shade of DarkCyan using RGB values
+    # Original DarkCyan is often around RGB(0, 128, 128) or similar.
+    # We'll use a muted dark cyan, e.g., RGB(0, 64, 64) or similar.
+    # The hex equivalent for RGB(0, 64, 64) is #004040.
+    $Host.UI.RawUI.BackgroundColor = [System.Drawing.ColorTranslator]::FromHtml("#004040") 
     $Host.UI.RawUI.BufferSize = New-Object Management.Automation.Host.Size(150, 3000)
     $Host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(150, 50)
     Clear-Host # Clear the screen to apply the new background color immediately
