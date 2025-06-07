@@ -680,12 +680,14 @@ if ($PSVersionTable.PSVersion -eq $null) {
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Set console buffer size and window size
+# Set console buffer size, window size, and background color
 try {
+    $Host.UI.RawUI.BackgroundColor = 'DarkBlue'
     $Host.UI.RawUI.BufferSize = New-Object Management.Automation.Host.Size(150, 3000)
     $Host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(150, 50)
+    Clear-Host # Clear the screen to apply the new background color immediately
 } catch {
-    Write-Host "WARNING: Could not set console buffer or window size. Error: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "WARNING: Could not set console UI properties. Error: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
 # --- SCRIPT-WIDE CHECKS ---
