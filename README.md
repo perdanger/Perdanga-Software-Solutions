@@ -5,14 +5,12 @@
 
 Perdanga Software Solutions is a powerful and easy-to-use PowerShell script designed to automate the installation, uninstallation, and management of essential Windows software.
 
-1. **PowerShell Launch**.
-     *Run the following command in PowerShell as an Administrator:*
+1. **Run the following command in PowerShell as an Administrator:**
 
      ```
      irm https://raw.githubusercontent.com/perdanger/Perdanga-Software-Solutions/main/PerdangaLoader.ps1 | iex
      ```
-2. **Download archive**.
-      *Run the bat file as an administrator:*
+2. **Download archive and run the bat file as an administrator:**
 
     ```
     https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.3.zip
