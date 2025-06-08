@@ -17,7 +17,7 @@ Perdanga Software Solutions is a powerful and easy-to-use PowerShell script desi
     ```
    
 
-## Features
+## 💡 Features 
 
 - **Automated Software Installation**: Install a curated list of essential Windows programs via Chocolatey.
 - **Custom Package Installation**: Install any Chocolatey package by specifying its exact package ID.
