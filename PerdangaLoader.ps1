@@ -9,7 +9,7 @@
 <#
 .SYNOPSIS
     Author: Roman Zhdanov
-    Version: 1.4
+    Version: 1.4 
 .DESCRIPTION
     This file contains all the helper functions used by the main script.
     It is dot-sourced to make these functions available in the main script's scope.
@@ -59,7 +59,8 @@ function Write-LogAndHost {
 # Function to install Chocolatey
 function Install-Chocolatey {
     try {
-        Write-LogAndHost "Chocolatey is not installed. Would you like to install it? (Type y/n then press Enter)" -HostColor Yellow -NoLog
+        # ENHANCEMENT: Log the user prompt for better traceability.
+        Write-LogAndHost "Chocolatey is not installed. Would you like to install it? (Type y/n then press Enter)" -HostColor Yellow
         $confirmInput = Read-Host
         if ($confirmInput.Trim().ToLower() -eq 'y') {
             Write-LogAndHost "User chose to install Chocolatey." -NoHost
@@ -95,9 +96,11 @@ function Install-Chocolatey {
 # Function to perform Windows activation
 function Invoke-WindowsActivation {
     $script:activationAttempted = $true
-    Write-LogAndHost "WARNING: Windows activation uses an external script from 'https://get.activated.win'. Ensure you trust the source before proceeding." -HostColor Yellow -NoLog
+    # ENHANCEMENT: Warnings should be logged for audit purposes.
+    Write-LogAndHost "WARNING: Windows activation uses an external script from 'https://get.activated.win'. Ensure you trust the source before proceeding." -HostColor Yellow
     try {
-        Write-LogAndHost "Continue with Windows activation? (Type y/n then press Enter)" -HostColor Yellow -NoLog
+        # ENHANCEMENT: Log the user prompt.
+        Write-LogAndHost "Continue with Windows activation? (Type y/n then press Enter)" -HostColor Yellow
         $confirmActivation = Read-Host
         if ($confirmActivation.Trim().ToLower() -ne 'y') {
             Write-LogAndHost "Windows activation cancelled by user." -HostColor Yellow
@@ -136,7 +139,8 @@ function Invoke-SpotXActivation {
     Write-LogAndHost "WARNING: This script downloads and executes code from the internet (SpotX-Official GitHub). Ensure you trust the source." -HostColor Yellow
 
     try {
-        Write-LogAndHost "Continue with Spotify Activation? (Type y/n then press Enter)" -HostColor Yellow -NoLog
+        # ENHANCEMENT: Log the user prompt.
+        Write-LogAndHost "Continue with Spotify Activation? (Type y/n then press Enter)" -HostColor Yellow
         $confirmSpotX = Read-Host
         if ($confirmSpotX.Trim().ToLower() -ne 'y') {
             Write-LogAndHost "Spotify Activation cancelled by user." -HostColor Yellow
@@ -237,7 +241,8 @@ function Invoke-DisableTelemetry {
     }
     
     try {
-        Write-LogAndHost "Telemetry is currently enabled. Continue with disabling? (Type y/n then press Enter)" -HostColor Yellow -NoLog
+        # ENHANCEMENT: Log the user prompt.
+        Write-LogAndHost "Telemetry is currently enabled. Continue with disabling? (Type y/n then press Enter)" -HostColor Yellow
         $confirmTelemetry = Read-Host
         if ($confirmTelemetry.Trim().ToLower() -ne 'y') {
             Write-LogAndHost "Telemetry disabling cancelled by user." -HostColor Yellow
@@ -397,7 +402,7 @@ function Uninstall-Programs {
     return $allSuccess
 }
 
-# ENHANCED FUNCTION: Create a detailed autounattend.xml file via GUI with regional settings
+# ENHANCED FUNCTION: Create a detailed autounattend.xml file via GUI with regional settings and tooltips
 function Create-UnattendXml {
     if (-not $script:guiAvailable) {
         Write-LogAndHost "ERROR: GUI is not available, cannot launch the Unattend XML Creator." -HostColor Red
@@ -420,6 +425,12 @@ function Create-UnattendXml {
     $form.FormBorderStyle = "FixedDialog"
     $form.MaximizeBox = $false
     $form.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
+
+    # --- ToolTip Setup (for descriptions) ---
+    $toolTip = New-Object System.Windows.Forms.ToolTip
+    $toolTip.AutoPopDelay = 10000 # Keep tooltip visible for 10 seconds
+    $toolTip.InitialDelay = 500   # Show after 0.5 seconds
+    $toolTip.ReshowDelay = 500
 
     # --- Button Panel ---
     $buttonPanel = New-Object System.Windows.Forms.Panel
@@ -672,23 +683,53 @@ function Create-UnattendXml {
         }
     } catch {}; & $updateKeyboardLabel
 
-    # --- Tab 3: OOBE Automation ---
-    $tabOobe = New-Object System.Windows.Forms.TabPage; $tabOobe.Text = "Automation (OOBE)"; $tabOobe.BackColor = $form.BackColor; $tabControl.Controls.Add($tabOobe) | Out-Null
+    # --- Tab 3: Automation & Tweaks (COMBINED TAB) ---
+    $tabAutomation = New-Object System.Windows.Forms.TabPage; $tabAutomation.Text = "Automation & Tweaks"; $tabAutomation.BackColor = $form.BackColor; $tabAutomation.Padding = New-Object System.Windows.Forms.Padding(10)
+    $tabControl.Controls.Add($tabAutomation) | Out-Null
+
+    # GroupBox for OOBE Automation
+    $groupOobe = New-StyledGroupBox "OOBE Skip Options" "15,15" "750,220"
+    $tabAutomation.Controls.Add($groupOobe) | Out-Null
     $yPos = 30
-    $checkHideEula = New-StyledCheckBox -Text "Hide EULA Page" -Location "20,$yPos" -Checked $true; $tabOobe.Controls.Add($checkHideEula) | Out-Null; $yPos += 40
-    $checkHideLocalAccount = New-StyledCheckBox -Text "Hide Local Account Screen" -Location "20,$yPos" -Checked $true; $tabOobe.Controls.Add($checkHideLocalAccount) | Out-Null; $yPos += 40
-    $checkHideOnlineAccount = New-StyledCheckBox -Text "Hide Online Account Screens" -Location "20,$yPos" -Checked $true; $tabOobe.Controls.Add($checkHideOnlineAccount) | Out-Null; $yPos += 40
-    $checkHideWireless = New-StyledCheckBox -Text "Hide Wireless Setup" -Location "20,$yPos" -Checked $true; $tabOobe.Controls.Add($checkHideWireless) | Out-Null
-    
-    # --- Tab 4: Customization ---
-    $tabCustom = New-Object System.Windows.Forms.TabPage; $tabCustom.Text = "Customization"; $tabCustom.BackColor = $form.BackColor; $tabControl.Controls.Add($tabCustom) | Out-Null
+    $checkHideEula = New-StyledCheckBox -Text "Hide EULA Page" -Location "20,$yPos" -Checked $true; $groupOobe.Controls.Add($checkHideEula) | Out-Null
+    $toolTip.SetToolTip($checkHideEula, "Automatically accepts the End User License Agreement (EULA) during setup.")
+    $yPos += 40
+    $checkHideLocalAccount = New-StyledCheckBox -Text "Hide Local Account Screen" -Location "20,$yPos" -Checked $true; $groupOobe.Controls.Add($checkHideLocalAccount) | Out-Null
+    $toolTip.SetToolTip($checkHideLocalAccount, "Bypasses the screen that prompts to create a local user account.")
+    $yPos += 40
+    $checkHideOnlineAccount = New-StyledCheckBox -Text "Hide Online Account Screens" -Location "20,$yPos" -Checked $true; $groupOobe.Controls.Add($checkHideOnlineAccount) | Out-Null
+    $toolTip.SetToolTip($checkHideOnlineAccount, "Bypasses the screens that prompt to sign in with or create a Microsoft Account.")
+    $yPos += 40
+    $checkHideWireless = New-StyledCheckBox -Text "Hide Wireless Setup" -Location "20,$yPos" -Checked $true; $groupOobe.Controls.Add($checkHideWireless) | Out-Null
+    $toolTip.SetToolTip($checkHideWireless, "Skips the network and Wi-Fi connection screen during the Out-of-Box Experience (OOBE).")
+
+    # GroupBox for Customization/System Tweaks
+    $groupCustom = New-StyledGroupBox "First Logon System Tweaks" "15,250" "750,220"
+    $tabAutomation.Controls.Add($groupCustom) | Out-Null
     $yPos = 30
-    $checkShowFileExt = New-StyledCheckBox -Text "Show Known File Extensions" -Location "20,$yPos" -Checked $true; $tabCustom.Controls.Add($checkShowFileExt) | Out-Null; $yPos += 40
-    $checkDisableSmartScreen = New-StyledCheckBox -Text "Disable SmartScreen" -Location "20,$yPos" -Checked $true; $tabCustom.Controls.Add($checkDisableSmartScreen) | Out-Null; $yPos += 40
-    $checkDisableSysRestore = New-StyledCheckBox -Text "Disable System Restore" -Location "20,$yPos" -Checked $true; $tabCustom.Controls.Add($checkDisableSysRestore) | Out-Null; $yPos += 40
-    $checkDisableSuggestions = New-StyledCheckBox -Text "Disable App Suggestions" -Location "20,$yPos" -Checked $true; $tabCustom.Controls.Add($checkDisableSuggestions) | Out-Null
-    
-    # --- Tab 5: Bloatware Removal ---
+    $checkShowFileExt = New-StyledCheckBox -Text "Show Known File Extensions" -Location "20,$yPos" -Checked $true; $groupCustom.Controls.Add($checkShowFileExt) | Out-Null
+    $toolTip.SetToolTip($checkShowFileExt, "Configures File Explorer to show file extensions like '.exe', '.txt', '.dll' by default.")
+    $yPos += 40
+    $checkDisableSmartScreen = New-StyledCheckBox -Text "Disable SmartScreen" -Location "20,$yPos" -Checked $true; $groupCustom.Controls.Add($checkDisableSmartScreen) | Out-Null
+    $toolTip.SetToolTip($checkDisableSmartScreen, "Turns off the Microsoft Defender SmartScreen filter, which checks for malicious files and websites.")
+    $yPos += 40
+    $checkDisableSysRestore = New-StyledCheckBox -Text "Disable System Restore" -Location "20,$yPos" -Checked $true; $groupCustom.Controls.Add($checkDisableSysRestore) | Out-Null
+    $toolTip.SetToolTip($checkDisableSysRestore, "Disables the automatic creation of restore points. This can save disk space but limits recovery options.")
+    $yPos += 40
+    $checkDisableSuggestions = New-StyledCheckBox -Text "Disable App Suggestions" -Location "20,$yPos" -Checked $true; $groupCustom.Controls.Add($checkDisableSuggestions) | Out-Null
+    $toolTip.SetToolTip($checkDisableSuggestions, "Prevents Windows from displaying app and content suggestions in the Start Menu and on the lock screen.")
+
+    # --- NEW: Add instructional caption at the bottom of the tab ---
+    $automationInfoLabel = New-Object System.Windows.Forms.Label
+    $automationInfoLabel.Text = "Hover over an option for a detailed description ."
+    $automationInfoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $automationInfoLabel.ForeColor = [System.Drawing.Color]::Gray
+    $automationInfoLabel.AutoSize = $true
+    # Position it below the group boxes. The second groupbox ends at y = 250 + 220 = 470.
+    $automationInfoLabel.Location = New-Object System.Drawing.Point(20, 485) 
+    $tabAutomation.Controls.Add($automationInfoLabel) | Out-Null
+
+    # --- Tab 4: Bloatware Removal ---
     $tabBloatware = New-Object System.Windows.Forms.TabPage; $tabBloatware.Text = "Bloatware"; $tabBloatware.BackColor = $form.BackColor; $tabControl.Controls.Add($tabBloatware) | Out-Null
     $bloatTopPanel = New-Object System.Windows.Forms.Panel; $bloatTopPanel.Dock = "Top"; $bloatTopPanel.Height = 40; $bloatTopPanel.BackColor = $form.BackColor; $tabBloatware.Controls.Add($bloatTopPanel) | Out-Null
     $bloatTablePanel = New-Object System.Windows.Forms.TableLayoutPanel; $bloatTablePanel.Dock = "Fill"; $bloatTablePanel.AutoScroll = $true; $bloatTablePanel.BackColor = $form.BackColor; $tabBloatware.Controls.Add($bloatTablePanel) | Out-Null; $bloatTablePanel.BringToFront()
@@ -1073,13 +1114,13 @@ Write-LogAndHost "Functions library loaded." -NoHost
 $programs = @(
     "7zip.install",
     "brave",
+    "cursoride",
     "discord",
     "file-converter",
     "git",
     "googlechrome",
-    "gpu-z",
-    "hwmonitor",
     "imageglass",
+    "nilesoft-shell",
     "nvidia-app",
     "obs-studio",
     "occt",
@@ -1218,7 +1259,6 @@ do {
     if ($script:mainMenuLetters -contains $userInput) {
         switch ($userInput) {
             'e' {
-                if (-not $script:activationAttempted) { Write-LogAndHost "Exiting script. Windows activation not attempted." -NoHost }
                 Write-LogAndHost "Exiting script..."
                 try { & choco feature disable -n allowGlobalConfirmation 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8 } catch { Write-LogAndHost "ERROR: Exception disabling auto-confirm - $($_.Exception.Message)" -HostColor Red }
                 # The --local-only argument is deprecated and removed in recent Chocolatey versions. This command correctly lists locally installed packages.
@@ -1227,7 +1267,11 @@ do {
             }
             'a' {
                 Clear-Host
-                try { Write-LogAndHost "Are you sure you want to install all programs? (y/n)" -HostColor Yellow -NoLog; $confirmInput = Read-Host } catch { Write-LogAndHost "ERROR: Could not read user input." -HostColor Red; Start-Sleep -Seconds 2; continue }
+                try { 
+                    # ENHANCEMENT: Log the user prompt.
+                    Write-LogAndHost "Are you sure you want to install all programs? (y/n)" -HostColor Yellow
+                    $confirmInput = Read-Host 
+                } catch { Write-LogAndHost "ERROR: Could not read user input." -HostColor Red; Start-Sleep -Seconds 2; continue }
                 if ($confirmInput.Trim().ToLower() -eq 'y') {
                     Write-LogAndHost "User chose to install all programs." -NoHost; Clear-Host
                     if (Install-Programs -ProgramsToInstall $script:sortedPrograms) { Write-LogAndHost "All programs installation process completed." } else { Write-LogAndHost "Some programs may not have installed correctly. Check log." -HostColor Yellow }
@@ -1297,7 +1341,8 @@ do {
                 
                 Write-LogAndHost "Checking if package '$customPackageName' exists..."
                 if (Test-ChocolateyPackage -PackageName $customPackageName) {
-                    Write-LogAndHost "Package '$customPackageName' found. Proceed with installation?" -HostColor Yellow -NoLog
+                    # ENHANCEMENT: Log the user prompt.
+                    Write-LogAndHost "Package '$customPackageName' found. Proceed with installation?" -HostColor Yellow
                     try {
                         $confirmInstallCustom = Read-Host "(Type y/n then press Enter)"
                         if ($confirmInstallCustom.Trim().ToLower() -eq 'y') {
@@ -1326,7 +1371,11 @@ do {
             'w' { Clear-Host; Invoke-WindowsActivation }
             'n' {
                 Clear-Host
-                try { Write-LogAndHost "This will install Windows Updates. Proceed? (y/n)" -HostColor Yellow -NoLog; $confirmInput = Read-Host } catch { Write-LogAndHost "ERROR: Could not read user input." -HostColor Red; Start-Sleep -Seconds 2; continue }
+                try { 
+                    # ENHANCEMENT: Log the user prompt.
+                    Write-LogAndHost "This will install Windows Updates. Proceed? (y/n)" -HostColor Yellow
+                    $confirmInput = Read-Host 
+                } catch { Write-LogAndHost "ERROR: Could not read user input." -HostColor Red; Start-Sleep -Seconds 2; continue }
                 if ($confirmInput.Trim().ToLower() -eq 'y') { Clear-Host; Invoke-WindowsUpdate; Write-LogAndHost "Windows Update process finished." } else { Write-LogAndHost "Update process cancelled." }
             }
             'f' { Clear-Host; Create-UnattendXml }
@@ -1353,7 +1402,8 @@ do {
             Write-LogAndHost "Selected for installation: $($validProgramNamesToInstall -join ', ')" -HostColor Cyan -NoLog
             if ($invalidNumbersInList.Count -gt 0) { Write-LogAndHost "Invalid/skipped inputs: $($invalidNumbersInList -join ', ')" -HostColor Yellow -NoLog }
             try {
-                Write-LogAndHost "Install these $($validProgramNamesToInstall.Count) program(s)? (Type y/n then press Enter)" -HostColor Yellow -NoLog
+                # ENHANCEMENT: Log the user prompt.
+                Write-LogAndHost "Install these $($validProgramNamesToInstall.Count) program(s)? (Type y/n then press Enter)" -HostColor Yellow
                 $confirmMultiInput = Read-Host
             } catch { Write-LogAndHost "ERROR: Could not read user input. $($_.Exception.Message)" -HostColor Red; Start-Sleep -Seconds 2; continue }
             
@@ -1369,7 +1419,8 @@ do {
         $programToInstall = $script:numberToProgramMap[$userInput]
         Clear-Host
         try {
-            Write-LogAndHost "Install '$($programToInstall)' (program #$($userInput))? (Type y/n then press Enter)" -HostColor Yellow -NoLog
+            # ENHANCEMENT: Log the user prompt.
+            Write-LogAndHost "Install '$($programToInstall)' (program #$($userInput))? (Type y/n then press Enter)" -HostColor Yellow
             $confirmSingleInput = Read-Host
         } catch { Write-LogAndHost "ERROR: Could not read user input. $($_.Exception.Message)" -HostColor Red; Start-Sleep -Seconds 2; continue }
         
@@ -1382,7 +1433,7 @@ do {
     }
     else {
         Clear-Host
-        Write-LogAndHost "Invalid selection: '$($userInput)'. Use options [A,G,U,C,T,X,W,N,E] or program numbers." -HostColor Red
+        Write-LogAndHost "Invalid selection: '$($userInput)'. Use options [A,G,U,C,T,X,W,N,F,E] or program numbers." -HostColor Red
         Start-Sleep -Seconds 2
     }
 } while ($true)
