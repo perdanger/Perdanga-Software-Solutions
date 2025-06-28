@@ -9,7 +9,7 @@
 <#
 .SYNOPSIS
     Author: Roman Zhdanov
-    Version: 1.4 
+    Version: 1.4
 .DESCRIPTION
     This file contains all the helper functions used by the main script.
     It is dot-sourced to make these functions available in the main script's scope.
@@ -213,7 +213,7 @@ function Invoke-WindowsUpdate {
         $updates = Get-WindowsUpdate -ErrorAction Stop
         if ($updates.Count -gt 0) {
             Write-LogAndHost "Found $($updates.Count) updates. Installing..."
-            Install-WindowsUpdate -AcceptAll -ErrorAction Stop 
+            Install-WindowsUpdate -AcceptAll -ErrorAction Stop
             Write-LogAndHost "Windows updates installed successfully. A manual reboot is strongly recommended to finalize the installation." -HostColor Green
         } else {
             Write-LogAndHost "No updates available."
@@ -420,7 +420,7 @@ function Create-UnattendXml {
     # --- GUI Setup ---
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "Perdanga Unattend.xml Creator"
-    $form.Size = New-Object System.Drawing.Size(800, 750) 
+    $form.Size = New-Object System.Drawing.Size(800, 750)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = "FixedDialog"
     $form.MaximizeBox = $false
@@ -606,10 +606,10 @@ function Create-UnattendXml {
         if ($selected -and $listTimeZone.Items.Contains($selected)) { $listTimeZone.SelectedItem = $selected } elseif ($listTimeZone.Items.Count -gt 0) { $listTimeZone.SelectedIndex = 0 }
         $listTimeZone.EndUpdate()
     }) | Out-Null
-    if ($listTimeZone.SelectedItem) { $labelSelectedTimeZone.Text = $listTimeZone.SelectedItem } 
+    if ($listTimeZone.SelectedItem) { $labelSelectedTimeZone.Text = $listTimeZone.SelectedItem }
 
     # --- ENHANCEMENT: Adjusted GroupBox title and height for new constraints ---
-    $groupKeyboard = New-StyledGroupBox "Keyboard Layouts (select up to 5)" "15,415" "750,245" 
+    $groupKeyboard = New-StyledGroupBox "Keyboard Layouts (select up to 5)" "15,415" "750,245"
     $tabRegional.Controls.Add($groupKeyboard) | Out-Null
     $yPos = 30
     $groupKeyboard.Controls.Add((New-StyledLabel -Text "Search:" -Location "15,$yPos")) | Out-Null; $textKeyboardSearch = New-StyledTextBox -Location "85,$yPos" -Size "645,20"; $groupKeyboard.Controls.Add($textKeyboardSearch) | Out-Null; $yPos += 35
@@ -726,7 +726,7 @@ function Create-UnattendXml {
     $automationInfoLabel.ForeColor = [System.Drawing.Color]::Gray
     $automationInfoLabel.AutoSize = $true
     # Position it below the group boxes. The second groupbox ends at y = 250 + 220 = 470.
-    $automationInfoLabel.Location = New-Object System.Drawing.Point(20, 485) 
+    $automationInfoLabel.Location = New-Object System.Drawing.Point(20, 485)
     $tabAutomation.Controls.Add($automationInfoLabel) | Out-Null
 
     # --- Tab 4: Bloatware Removal ---
@@ -930,10 +930,92 @@ function Test-ChocolateyPackage {
     }
 }
 
-# Function to display the selection menu
+# --- EASTER EGG FUNCTION ---
+function Show-PerdangaArt {
+    Clear-Host
+    $perdangaArt = @"
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.........@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%%@@@%%@%%%%####%%%%%######%%%%%%%%%##%%%%@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.........
+.........@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%%########**++++++++**+++++++*##**##*+++***###%%@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.........
+.........@@.....:::::-+#%@@@@#+++++============+*+++++=+++++++++==++====+++==++++=====++++++==++**++++++*##*=-::......@@.........
+.........@@....:..::-=+*#%#*++++====-----=------======-------==-----=---========------==========-=====-+####+=-:......@@.........
+.........@@......:::--+####+=======-----------::::------::::-----::--------==------::::--:--------=-==-=**#*+==-......@@.........
+.........@@....:..::--=+%@%+=====--=-------::::.:--::.:::::::----:--:-:------::.::::::---:-----=========+***+=--......@@.........
+.........@@........:::--+@@#+++=====-----:---=------------::-:::::::-::--::::::::::::::-----==--========+*+*#+-:......@@.........
+.........@@...........--+%@@#++======+===-:-+###*++=======+++++==--=---------:-------------------======++++**+-.......@@.........
+.........@@.......::::::+@@@%++==+++++===-*%@%%%%##*++++++***##*****+*#####***++++++++=--:::----========+++*+=-.......@@.........
+.........@@...........:-%@@@%#+++**+=-:-*@@@%#*++======++++====++++*******########%%@@@%+-:-----=====++++++*++-.......@@.........
+.........@@...........-*@@@@%#+++=---:=%@@@#++++==-::---------------------=====+*#%@@@@@@%=-:-====++++###*###+-.......@@.........
+.........@@...........-#@@%#+=======+#@@@@#*+=+#+=--::::::::--::---------------=++++++#@@@%=--=++++*+=+#%%%%#+-.......@@.........
+.........@@...........-#@@@@@#*++++*@@@@@#+=--+#+=-----:::......:::::::....:--=========+%@@@*-.-===+*+==+#%@%+-.......@@.........
+.........@@...........:+%@@@@@%###%@@@@@**+=+++*=---::::......:............::---=========%@@@@+======+==#@@@#=-.......@@.........
+.........@@............-+%%@@%%%%%@@@@@+=#+++====--:::::::........:....:::------=========+#@@@@*+++#%@%@@@@%+-........@@.........
+.........@@.............-*%@#*@@@@@@@*--*#+++====--------::........:::----------======+=-=+%@@@%###@@@@@@@%*=:........@@.........
+.........@@.............:=@@##%%*+%@#-#@@@@@%*==----:::::::::::::::-:::-----:::--====+++===*%@@%%@@%%%@@%#+=-.........@@.........
+.........@@..........:...-#@#--+*+@@-@@@@@@@@@@%*==---:::..:::::::::...:::::--=++#%@@@@@+---*@@++###+*%#=---.::::::...@@.........
+.........@@.......:..:....-#@#*++=@%*@@@+++#%@@@@%##*+=-::..::::...::---==+*##%%@@@@@@@@@@+--@@+=++-:=#%*=-------:::::@@.........
+.........@@...............:=@@*--#@+%@@@@@@%*=-:=+###*+==-:.....:.:-==+#%@@@@%%##*+===*@@@%=-#@%=*#-:=+##+------------@@.........
+.........@@................:+@@@=%@:#*###%##*++++=--------:...::::--===++=-:--=+*##%%@@%@@@*=-@@:+#=-=+##+-:::::...::.@@.........
+.........@@..............:..:+@@%@*+#+*%@@%*+*##+=---=--=----:..:::----===+==----=====+*+#%%%+@@++#*-+#@%=------------@@.........
+.........@@.:::...............=@@#-#%#****#%%######*===-==+==---===-------=*#%%%##+*####*+*#%%-@@=*#*@@@+:..::::::::::@@.........
+.........@@...................:=*=-#%++@@@@#@@++====:-==*%#*+--=+*+===++=--+====++--##-=**++*%=@@@@@@@%+-::...........@@.........
+.........@@..:................::===#%%%*+%@%######+=--=#@@##+=-=++%%+==--==*#%%%%%#@@@@%#***##*+%@@@@*-...............@@.........
+.........@@:.:.::::::::::::::::==.-+*+=+@@@#++*++===+#@@@@##+--==-+@@%#*+==+#%%#####*-=%@@@@@%+++%@=::................@@.........
+.........@@.........::::::::::-*++:=++###%#=--====+*%@@@@=##+-----:+@@@%*===---====++=++**###+-#+%@=..................@@.........
+.........@@.................::+%=*-++#*##+=======+++@@@%-*%#=-.-===-=*##*=======---=++====++--:#*%@=..................@@.........
+.........@@..................-@@##-++*++*+===--:::-=@@%-#%%#+===++*#+=++=-:::-----=+++===+++=-:#*%@=..................@@.........
+.........@@..................=@%%*-=++++++==---===+@@@=%@@@*===+*#+=#%%%*-::::---==++==--=++==-#+%@=..................@@.........
+.........@@..................+@#@+-==++++++====--+@@%=%@@%*=---=*%@%+-=@@+.:::---====-==-=+====#=%@+..................@@.........
+.........@@.................:+@*%+====**+++===--:%@@@@@%#*=-:::-=+@@@@@#%#.::::---======-===-=*#=#@*:.................@@.........
+.........@@.................:#@#%+===+##*++==--::%@@@@@%++=-::-:-+%%%@@@@#:::::----==========*%#=@@+:.................@@.........
+.........@@.................:#@##*+==+##++===-..:-=+=:+#%#+==+++**=-==-==-..::-----=======-=*##++@@-..................@@.........
+.........@@.................:+@@-++==+##+==---====-----+#*##*###+===--::::----.----========*###+@@@:..................@@.........
+.........@@...............::.-@@+===-+**+=-+##*+=-:--==--==++++=--:---::.:--==+=---======+*##*=%@@+:..................@@.........
+.........@@..................:#@@=+++=+++=+##+==------=+=============-:.:::---+*+---====++++=:+@@#....................@@.........
+.........@@............::.....=@@-+++=-=+==-=+##+=-----==++####*++==-:::.:--===-+=--=--==+=-:=@@@-....................@@.........
+.........@@...................-@@#--:---=-=*%%%*++++++===::--=-::-++*#*+++++=+*+:------=====-%@@*:....................@@.........
+.........@@....................%@@-=:..--===+=---=--:::-------------::::.:---=+++-:::.:-----+@@%:.....................@@.........
+.........@@....................=@@#-=-::=++=----==++++===-.::-:.-=+*##*####+=--==--::-==--:+@@@=......................@@.........
+.........@@....................:%@@=++==-=++---:.--------===+==----:::.::.::::-==--:=+*++=-@@@#:......................@@.........
+.........@@.....................-@@@-*#*+====---::--==--==++++++====-------::.-===--+*+===@@@%-.......................@@.........
+.........@@.....................:@@@@++**+=---===---::---======---------------===-=*#+=-#@@@%.........................@@.........
+.........@@......................-@@@@@-=+++-::---===========+===---====--------=##*+-:%@@@@-.........................@@.........
+.........@@.......................-+@@@@%-==---::-------=-:-----:------:::::::-++*+=--@@@@+...........................@@.........
+.........@@........................:=#@@@@=:===-:--::---=------------------===+++==-+@@@@+............................@@.........
+.........@@.....................:=++*+*@@@@+--==--------==--::-------===--=++====-.#@@@@+:............................@@.........
+.........@@.................:-=+*##*=-=*%@@@#=-==----=====-------========-+==+===#@@@@#**+=-:.........................@@.........
+.........@@...........:--=++*####+=---=+*##%%*=---=--==++====-========--=++-:--#@@@@@*=+####+=-:......................@@.........
+.........@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%##*++++++*####%%%@@%**###@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.........
+.........@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@%%#*++======+*##*##%#*+*#%@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.........
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+.................................................................................................................................
+"@
+    Write-Host $perdangaArt -ForegroundColor Magenta
+    Write-Host "Press any key to return..." -ForegroundColor DarkGray
+    $null = Read-Host
+}
+
+
+# ENHANCED FUNCTION: Display the selection menu with an animation
 function Show-Menu {
     Clear-Host
 
+    # --- ASCII Art Definition ---
     $asciiArt = @(
        "__/\\\\\\\\\\\\\_______________________________________/\\\____________________________________________________________",
         " _\/\\\/////////\\\____________________________________\/\\\____________________________________________________________",
@@ -955,10 +1037,7 @@ function Show-Menu {
         "                 _\///_____________\/////_____\///____________\//////////______\///______\//////////____\///____________________________"
     )
 
-    foreach ($line in $asciiArt) {
-        Write-Host $line -ForegroundColor Cyan
-    }
-
+    # --- Menu Content Generation ---
     $menuLines = New-Object System.Collections.Generic.List[string]
     $fixedMenuWidth = 80 
     $pssText = "Perdanga Software Solutions"
@@ -1053,39 +1132,68 @@ function Show-Menu {
     
     $menuLines.Add($optionsUnderline)
 
+    # --- Calculate Padding ---
     try {
         $consoleWidth = $Host.UI.RawUI.WindowSize.Width
     }
     catch {
-        # Fallback if RawUI is not available
         $consoleWidth = 80
     }
     $blockPaddingValue = [math]::Floor(($consoleWidth - $fixedMenuWidth) / 2)
     if ($blockPaddingValue -lt 0) { $blockPaddingValue = 0 }
     $blockPaddingString = " " * $blockPaddingValue
 
-    foreach ($lineEntry in $menuLines) {
-        $trimmedEntry = $lineEntry.Trim()
-        if ($trimmedEntry -eq $pssText -or
-            $trimmedEntry -like ($pssUnderline.Trim()) -or
-            $trimmedEntry -like ($dashedLine.Trim()) -or
-            $trimmedEntry -eq $programHeader -or
-            $trimmedEntry -eq $optionsHeader -or
-            $trimmedEntry -like ($programUnderline.Trim()) -or
-            $trimmedEntry -like ($optionsUnderline.Trim())) {
-            Write-Host ($blockPaddingString + $lineEntry) -ForegroundColor Cyan
-        } else {
-            Write-Host ($blockPaddingString + $lineEntry) -ForegroundColor White
+    # --- Conditional Animation ---
+    if ($script:firstRun) {
+        # --- Animated Reveal on First Run ---
+        try {
+            # Faster character-by-character reveal for the ASCII art by removing the delay
+            $initialCursorPos = $Host.UI.RawUI.CursorPosition
+            $lineCounter = 0
+            foreach ($line in $asciiArt) {
+                $Host.UI.RawUI.CursorPosition = New-Object System.Management.Automation.Host.Coordinates ($initialCursorPos.X), ($initialCursorPos.Y + $lineCounter)
+                # Loop through each character to print it, creating the animation effect
+                $line.ToCharArray() | ForEach-Object {
+                    Write-Host $_ -NoNewline -ForegroundColor Cyan
+                }
+                Write-Host "" # Go to the next line after the current line of art is printed
+                $lineCounter++
+            }
+        } catch {
+            # Fallback for environments where RawUI might not be accessible
+            foreach ($line in $asciiArt) { Write-Host $line -ForegroundColor Cyan }
+        }
+        
+        # Smoothly reveal each menu line
+        foreach ($lineEntry in $menuLines) {
+            $trimmedEntry = $lineEntry.Trim()
+            $color = if ($trimmedEntry -eq $pssText -or $trimmedEntry -like ($pssUnderline.Trim()) -or $trimmedEntry -like ($dashedLine.Trim()) -or $trimmedEntry -eq $programHeader -or $trimmedEntry -eq $optionsHeader -or $trimmedEntry -like ($programUnderline.Trim()) -or $trimmedEntry -like ($optionsUnderline.Trim())) { "Cyan" } else { "White" }
+            Write-Host ($blockPaddingString + $lineEntry) -ForegroundColor $color
+            Start-Sleep -Milliseconds 15
+        }
+        # Set the flag to false so the animation doesn't run again
+        $script:firstRun = $false
+    } else {
+        # --- Instant Display for Subsequent Runs ---
+        foreach ($line in $asciiArt) {
+            Write-Host $line -ForegroundColor Cyan
+        }
+        
+        foreach ($lineEntry in $menuLines) {
+            $trimmedEntry = $lineEntry.Trim()
+            $color = if ($trimmedEntry -eq $pssText -or $trimmedEntry -like ($pssUnderline.Trim()) -or $trimmedEntry -like ($dashedLine.Trim()) -or $trimmedEntry -eq $programHeader -or $trimmedEntry -eq $optionsHeader -or $trimmedEntry -like ($programUnderline.Trim()) -or $trimmedEntry -like ($optionsUnderline.Trim())) { "Cyan" } else { "White" }
+            Write-Host ($blockPaddingString + $lineEntry) -ForegroundColor $color
         }
     }
+    
     Write-Host "" 
-
     $promptTextForOneLine = "Enter option, single number, or list of numbers:"
     $promptPaddingOneLine = [math]::Floor(($fixedMenuWidth - $promptTextForOneLine.Length) / 2)
     if ($promptPaddingOneLine -lt 0) { $promptPaddingOneLine = 0 }
     $centeredPromptOneLine = (" " * $promptPaddingOneLine) + $promptTextForOneLine
     Write-Host ($blockPaddingString + $centeredPromptOneLine) -NoNewline -ForegroundColor Yellow
 }
+
 
 # Log that the functions library has been loaded successfully
 Write-LogAndHost "Functions library loaded." -NoHost
@@ -1138,7 +1246,8 @@ $programs = @(
 # --- SCRIPT-WIDE VARIABLES ---
 $script:sortedPrograms = $programs | Sort-Object
 $script:mainMenuLetters = @('a', 'c', 'e', 'f', 'g', 'n', 't', 'u', 'w', 'x')
-$script:mainMenuRegexPattern = "^[" + ($script:mainMenuLetters -join '') + "0-9\s,]+$"
+# FIX: Regex now properly handles single letters by joining with '|'
+$script:mainMenuRegexPattern = "^(perdanga|" + ($script:mainMenuLetters -join '|') + "|[0-9,\s]+)$"
 $script:availableProgramNumbers = 1..($script:sortedPrograms.Count) | ForEach-Object { $_.ToString() }
 $script:programToNumberMap = @{}
 $script:numberToProgramMap = @{}
@@ -1227,7 +1336,7 @@ catch { Write-LogAndHost "ERROR: Exception occurred while checking Chocolatey. $
 
 Write-Host ""; Write-LogAndHost "Clearing Chocolatey cache..."
 try {
-    & choco cache remove --all 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8 
+    & choco cache remove --all 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
     if ($LASTEXITCODE -eq 0) { Write-LogAndHost "Cache cleared." } else { Write-LogAndHost "WARNING: Failed to clear Chocolatey cache. $($LASTEXITCODE)" -HostColor Yellow }
 } catch { Write-LogAndHost "ERROR: Exception clearing Chocolatey cache. $($_.Exception.Message)" -HostColor Red }
 
@@ -1238,6 +1347,8 @@ try {
 } catch { Write-LogAndHost "ERROR: Exception enabling automatic confirmation. $($_.Exception.Message)" -HostColor Red }
 Write-Host ""
 
+# Set a flag to run the menu animation only once.
+$script:firstRun = $true
 
 # --- MAIN LOOP ---
 do {
@@ -1245,16 +1356,20 @@ do {
     try { $userInput = Read-Host } catch { Write-LogAndHost "ERROR: Could not read user input. $($_.Exception.Message)" -HostColor Red; Start-Sleep -Seconds 2; continue }
     $userInput = $userInput.Trim().ToLower()
 
-    if ([string]::IsNullOrEmpty($userInput)) {
-        Clear-Host; Write-LogAndHost "No input detected. Please enter an option." -HostColor Yellow
-        Write-LogAndHost "Press any key to return to the menu..." -HostColor DarkGray -NoLog; $null = Read-Host; continue 
+    # --- EASTER EGG CHECK ---
+    if ($userInput -eq 'perdanga') {
+        Show-PerdangaArt
+        continue
     }
 
-    if ($userInput -and $userInput -notmatch $script:mainMenuRegexPattern) { 
-        Clear-Host; $validOptions = ($script:mainMenuLetters | Sort-Object | ForEach-Object { $_.ToUpper() }) -join ','
-        $errorMessage = "Invalid input: '$userInput'. Use options [$validOptions] or program numbers."
-        Write-LogAndHost $errorMessage -HostColor Red -LogPrefix "Invalid user input: '$userInput'."; Start-Sleep -Seconds 2; continue
+    if ([string]::IsNullOrEmpty($userInput)) {
+        Clear-Host; Write-LogAndHost "No input detected. Please enter an option." -HostColor Yellow
+        Write-LogAndHost "Press any key to return to the menu..." -HostColor DarkGray -NoLog; $null = Read-Host; continue
     }
+    
+    # This block is no longer needed because the corrected regex handles all cases.
+    # The final 'else' block will catch any valid-but-unhandled patterns.
+    # if ($userInput -and $userInput -notmatch $script:mainMenuRegexPattern) { ... }
 
     if ($script:mainMenuLetters -contains $userInput) {
         switch ($userInput) {
@@ -1267,10 +1382,10 @@ do {
             }
             'a' {
                 Clear-Host
-                try { 
+                try {
                     # ENHANCEMENT: Log the user prompt.
                     Write-LogAndHost "Are you sure you want to install all programs? (y/n)" -HostColor Yellow
-                    $confirmInput = Read-Host 
+                    $confirmInput = Read-Host
                 } catch { Write-LogAndHost "ERROR: Could not read user input." -HostColor Red; Start-Sleep -Seconds 2; continue }
                 if ($confirmInput.Trim().ToLower() -eq 'y') {
                     Write-LogAndHost "User chose to install all programs." -NoHost; Clear-Host
@@ -1278,14 +1393,14 @@ do {
                     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
                 } else { Write-LogAndHost "Installation of all programs cancelled." }
             }
-            'g' { 
+            'g' {
                 if ($script:guiAvailable) {
                     Write-LogAndHost "User chose GUI-based installation." -NoHost
                     $form = New-Object System.Windows.Forms.Form; $form.Text = "Perdanga GUI - Install Programs"; $form.Size = New-Object System.Drawing.Size(400, 450); $form.StartPosition = "CenterScreen"; $form.FormBorderStyle = "FixedDialog"; $form.MaximizeBox = $false; $form.BackColor = [System.Drawing.Color]::FromArgb(0, 30, 60)
                     $panel = New-Object System.Windows.Forms.Panel; $panel.Size = New-Object System.Drawing.Size(360, 350); $panel.Location = New-Object System.Drawing.Point(10, 10); $panel.AutoScroll = $true; $panel.BackColor = [System.Drawing.Color]::FromArgb(0, 30, 60); $form.Controls.Add($panel)
                     $checkboxes = @(); $yPos = 10
                     for ($i = 0; $i -lt $script:sortedPrograms.Length; $i++) {
-                        $progName = $script:sortedPrograms[$i]; $dispNumber = $script:programToNumberMap[$progName]; $displayText = "$($dispNumber). $progName".PadRight(30) 
+                        $progName = $script:sortedPrograms[$i]; $dispNumber = $script:programToNumberMap[$progName]; $displayText = "$($dispNumber). $progName".PadRight(30)
                         $checkbox = New-Object System.Windows.Forms.CheckBox; $checkbox.Text = $displayText; $checkbox.Location = New-Object System.Drawing.Point(10, $yPos); $checkbox.Size = New-Object System.Drawing.Size(330, 24); $checkbox.Font = New-Object System.Drawing.Font("Arial", 12); $checkbox.ForeColor = [System.Drawing.Color]::White; $checkbox.BackColor = [System.Drawing.Color]::FromArgb(0, 30, 60); $panel.Controls.Add($checkbox); $checkboxes += $checkbox; $yPos += 28
                     }
                     $okButton = New-Object System.Windows.Forms.Button; $okButton.Text = "Install Selected"; $okButton.Location = New-Object System.Drawing.Point(140, 370); $okButton.Size = New-Object System.Drawing.Size(120, 30); $okButton.Font = New-Object System.Drawing.Font("Arial", 10); $okButton.ForeColor = [System.Drawing.Color]::White; $okButton.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180); $okButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat; $okButton.FlatAppearance.BorderSize = 0; $okButton.Add_Click({ $form.DialogResult = [System.Windows.Forms.DialogResult]::OK; $form.Close() }); $form.Controls.Add($okButton)
@@ -1299,7 +1414,7 @@ do {
                     } else { Write-LogAndHost "GUI installation cancelled by user." }
                 } else { Clear-Host; Write-LogAndHost "ERROR: GUI selection (g) is not available." -HostColor Red; Start-Sleep -Seconds 2; }
             }
-            'u' { 
+            'u' {
                 if ($script:guiAvailable) {
                     Write-LogAndHost "User chose GUI-based uninstallation." -NoHost
                     $installedChocoPackages = Get-InstalledChocolateyPackages
@@ -1371,17 +1486,17 @@ do {
             'w' { Clear-Host; Invoke-WindowsActivation }
             'n' {
                 Clear-Host
-                try { 
+                try {
                     # ENHANCEMENT: Log the user prompt.
                     Write-LogAndHost "This will install Windows Updates. Proceed? (y/n)" -HostColor Yellow
-                    $confirmInput = Read-Host 
+                    $confirmInput = Read-Host
                 } catch { Write-LogAndHost "ERROR: Could not read user input." -HostColor Red; Start-Sleep -Seconds 2; continue }
                 if ($confirmInput.Trim().ToLower() -eq 'y') { Clear-Host; Invoke-WindowsUpdate; Write-LogAndHost "Windows Update process finished." } else { Write-LogAndHost "Update process cancelled." }
             }
             'f' { Clear-Host; Create-UnattendXml }
         }
     }
-    elseif ($userInput -match '[, ]+') { 
+    elseif ($userInput -match '[, ]+') {
         Clear-Host
         $selectedIndividualInputs = $userInput -split '[, ]+' | ForEach-Object { $_.Trim() } | Where-Object {$_ -ne ""}
         $validProgramNamesToInstall = New-Object System.Collections.Generic.List[string]
@@ -1415,7 +1530,7 @@ do {
             } else { Write-LogAndHost "Installation of selected programs cancelled." }
         }
     }
-    elseif ($script:numberToProgramMap.ContainsKey($userInput)) { 
+    elseif ($script:numberToProgramMap.ContainsKey($userInput)) {
         $programToInstall = $script:numberToProgramMap[$userInput]
         Clear-Host
         try {
@@ -1433,7 +1548,10 @@ do {
     }
     else {
         Clear-Host
-        Write-LogAndHost "Invalid selection: '$($userInput)'. Use options [A,G,U,C,T,X,W,N,F,E] or program numbers." -HostColor Red
+        $validOptions = ($script:mainMenuLetters | Sort-Object | ForEach-Object { $_.ToUpper() }) -join ','
+        $errorMessage = "Invalid input: '$userInput'. Use options [$validOptions], program numbers, or a secret word."
+        # Log the full error message, but prefix it for clarity in the log file, avoiding duplication.
+        Write-LogAndHost -Message $errorMessage -LogPrefix "ERROR: " -HostColor Red
         Start-Sleep -Seconds 2
     }
 } while ($true)
