@@ -949,7 +949,7 @@ function Show-PerdangaArt {
 .........@@....:..::-=+*#%#*++++====-----=------======-------==-----=---========------==========-=====-+####+=-:......@@.........
 .........@@......:::--+####+=======-----------::::------::::-----::--------==------::::--:--------=-==-=**#*+==-......@@.........
 .........@@....:..::--=+%@%+=====--=-------::::.:--::.:::::::----:--:-:------::.::::::---:-----=========+***+=--......@@.........
-.........@@........:::--+@@#+++=====-----:---=------------::-:::::::-::--::::::::::::::-----==--========+*+*#+-:......@@.........
+.........@@........:::--+@@#++=====-----:---=------------::-:::::::-::--::::::::::::::-----==--========+*+*#+-:......@@.........
 .........@@...........--+%@@#++======+===-:-+###*++=======+++++==--=---------:-------------------======++++**+-.......@@.........
 .........@@.......::::::+@@@%++==+++++===-*%@%%%%##*++++++***##*****+*#####***++++++++=--:::----========+++*+=-.......@@.........
 .........@@...........:-%@@@%#+++**+=-:-*@@@%#*++======++++====++++*******########%%@@@%+-:-----=====++++++*++-.......@@.........
@@ -1011,7 +1011,10 @@ function Show-PerdangaArt {
 }
 
 
-# ENHANCED FUNCTION: Display the selection menu with an animation
+# ============================================================================
+# =====               START OF CORRECTED Show-Menu FUNCTION              =====
+# ============================================================================
+# CORRECTED FUNCTION: Display the selection menu, fixes centering in fullscreen.
 function Show-Menu {
     Clear-Host
 
@@ -1037,7 +1040,7 @@ function Show-Menu {
         "                 _\///_____________\/////_____\///____________\//////////______\///______\//////////____\///____________________________"
     )
 
-    # --- Menu Content Generation ---
+    # --- Menu Content Generation (Original logic is kept) ---
     $menuLines = New-Object System.Collections.Generic.List[string]
     $fixedMenuWidth = 80 
     $pssText = "Perdanga Software Solutions"
@@ -1132,67 +1135,79 @@ function Show-Menu {
     
     $menuLines.Add($optionsUnderline)
 
-    # --- Calculate Padding ---
+    # --- Calculate Padding (REVISED) ---
+    # This section is updated for reliability.
+    $consoleWidth = 0
     try {
-        $consoleWidth = $Host.UI.RawUI.WindowSize.Width
-    }
-    catch {
-        $consoleWidth = 80
-    }
-    $blockPaddingValue = [math]::Floor(($consoleWidth - $fixedMenuWidth) / 2)
-    if ($blockPaddingValue -lt 0) { $blockPaddingValue = 0 }
-    $blockPaddingString = " " * $blockPaddingValue
+        # Try .NET method first, which can be more reliable in some non-standard hosts.
+        $consoleWidth = [System.Console]::WindowWidth
+    } catch {}
 
-    # --- Conditional Animation ---
+    if ($consoleWidth -le 1) { # If it failed or returned an unusable value
+        try {
+            # Fallback to PowerShell host-specific property.
+            $consoleWidth = $Host.UI.RawUI.WindowSize.Width
+        } catch {}
+    }
+    # If both methods fail, use a reasonable default.
+    if ($consoleWidth -le 1) {
+        $consoleWidth = 120 
+    }
+
+    # Padding for the menu block (which has a fixed width of 80)
+    $menuPaddingValue = [math]::Floor(($consoleWidth - $fixedMenuWidth) / 2)
+    if ($menuPaddingValue -lt 0) { $menuPaddingValue = 0 }
+    $menuPaddingString = " " * $menuPaddingValue
+
+    # Padding for the ASCII art (calculated based on its own, wider dimensions)
+    $artWidth = ($asciiArt | Measure-Object -Property Length -Maximum).Maximum
+    $artPaddingValue = [math]::Floor(($consoleWidth - $artWidth) / 2)
+    if ($artPaddingValue -lt 0) { $artPaddingValue = 0 }
+    $artPaddingString = " " * $artPaddingValue
+
+
+    # --- Display Logic (REVISED) ---
+    # This section is updated to use the new padding and has a simplified animation.
     if ($script:firstRun) {
         # --- Animated Reveal on First Run ---
-        try {
-            # Faster character-by-character reveal for the ASCII art by removing the delay
-            $initialCursorPos = $Host.UI.RawUI.CursorPosition
-            $lineCounter = 0
-            foreach ($line in $asciiArt) {
-                $Host.UI.RawUI.CursorPosition = New-Object System.Management.Automation.Host.Coordinates ($initialCursorPos.X), ($initialCursorPos.Y + $lineCounter)
-                # Loop through each character to print it, creating the animation effect
-                $line.ToCharArray() | ForEach-Object {
-                    Write-Host $_ -NoNewline -ForegroundColor Cyan
-                }
-                Write-Host "" # Go to the next line after the current line of art is printed
-                $lineCounter++
-            }
-        } catch {
-            # Fallback for environments where RawUI might not be accessible
-            foreach ($line in $asciiArt) { Write-Host $line -ForegroundColor Cyan }
+        foreach ($line in $asciiArt) {
+            Write-Host ($artPaddingString + $line) -ForegroundColor Cyan
+            Start-Sleep -Milliseconds 10
         }
         
-        # Smoothly reveal each menu line
         foreach ($lineEntry in $menuLines) {
             $trimmedEntry = $lineEntry.Trim()
             $color = if ($trimmedEntry -eq $pssText -or $trimmedEntry -like ($pssUnderline.Trim()) -or $trimmedEntry -like ($dashedLine.Trim()) -or $trimmedEntry -eq $programHeader -or $trimmedEntry -eq $optionsHeader -or $trimmedEntry -like ($programUnderline.Trim()) -or $trimmedEntry -like ($optionsUnderline.Trim())) { "Cyan" } else { "White" }
-            Write-Host ($blockPaddingString + $lineEntry) -ForegroundColor $color
+            Write-Host ($menuPaddingString + $lineEntry) -ForegroundColor $color
             Start-Sleep -Milliseconds 15
         }
-        # Set the flag to false so the animation doesn't run again
         $script:firstRun = $false
     } else {
         # --- Instant Display for Subsequent Runs ---
         foreach ($line in $asciiArt) {
-            Write-Host $line -ForegroundColor Cyan
+            Write-Host ($artPaddingString + $line) -ForegroundColor Cyan
         }
         
         foreach ($lineEntry in $menuLines) {
             $trimmedEntry = $lineEntry.Trim()
             $color = if ($trimmedEntry -eq $pssText -or $trimmedEntry -like ($pssUnderline.Trim()) -or $trimmedEntry -like ($dashedLine.Trim()) -or $trimmedEntry -eq $programHeader -or $trimmedEntry -eq $optionsHeader -or $trimmedEntry -like ($programUnderline.Trim()) -or $trimmedEntry -like ($optionsUnderline.Trim())) { "Cyan" } else { "White" }
-            Write-Host ($blockPaddingString + $lineEntry) -ForegroundColor $color
+            Write-Host ($menuPaddingString + $lineEntry) -ForegroundColor $color
         }
     }
     
     Write-Host "" 
     $promptTextForOneLine = "Enter option, single number, or list of numbers:"
-    $promptPaddingOneLine = [math]::Floor(($fixedMenuWidth - $promptTextForOneLine.Length) / 2)
-    if ($promptPaddingOneLine -lt 0) { $promptPaddingOneLine = 0 }
-    $centeredPromptOneLine = (" " * $promptPaddingOneLine) + $promptTextForOneLine
-    Write-Host ($blockPaddingString + $centeredPromptOneLine) -NoNewline -ForegroundColor Yellow
+    # Center the prompt text within the menu's fixed width
+    $promptInternalPadding = [math]::Floor(($fixedMenuWidth - $promptTextForOneLine.Length) / 2)
+    if ($promptInternalPadding -lt 0) { $promptInternalPadding = 0 }
+    $centeredPromptText = (" " * $promptInternalPadding) + $promptTextForOneLine
+    
+    # Now, add the main menu padding to center the entire prompt line
+    Write-Host ($menuPaddingString + $centeredPromptText) -NoNewline -ForegroundColor Yellow
 }
+# ============================================================================
+# =====                END OF CORRECTED Show-Menu FUNCTION               =====
+# ============================================================================
 
 
 # Log that the functions library has been loaded successfully
