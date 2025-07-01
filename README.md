@@ -99,5 +99,4 @@ This project incorporates code from the following third-party sources:
   - Copyright © 2025 massgravel
   - License: GPL-3.0
 
-## Perdanga
-## Forever
+# Perdanga Forever
