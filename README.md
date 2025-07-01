@@ -99,4 +99,4 @@ This project incorporates code from the following third-party sources:
   - Copyright © 2025 massgravel
   - License: GPL-3.0
 
-<p align="center"><b>⚠️PERDANGA FOREVER⚠️</b></p>
+<p align="center"><b>⚡PERDANGA FOREVER⚡</b></p>
