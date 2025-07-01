@@ -1,13 +1,11 @@
 # Perdanga Software Solutions
 
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue)
-![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green)
-![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue) ![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green) ![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown)
 
----
-Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
+> [!NOTE]  
+> Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
 
-## Quick Start
+## 🚀 Quick Start
 
 1. **Run in PowerShell (Administrator)**:
 
@@ -20,17 +18,18 @@ Perdanga Software Solutions is a user-friendly PowerShell script designed to sim
    ```
    https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip
    ```
----
-## Supported Programs
- 
+
+> [!IMPORTANT]  
+> Ensure PowerShell is run with **Administrator privileges** to avoid execution issues.
+
+## 📋 Supported Programs
+
 7zip.install, brave, cursoride, discord, file-converter,  
 git, googlechrome, imageglass, nilesoft-shell, nvidia-app,  
 obs-studio, occt, qbittorrent, revo-uninstaller, spotify,  
 steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
----
-
-## 💥 Features 
+## 💥 Features
 
 ### 1. Main Menu
 
@@ -45,8 +44,9 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 - **\[F\] Create Unattend.xml File**: Generates an `autounattend.xml` file for automated Windows installation.
 - **\[E\] Exit Script**: Safely exits and disables Chocolatey auto-confirmation.
 
-To install specific programs, enter their numbers (e.g., `1`, `1 5 17`, or `1,5,17`) from the supported programs list.\
-**Tip**: Type `perdanga` for a hidden surprise! 🧀
+> [!TIP]  
+> To install specific programs, enter their numbers (e.g., `1`, `1 5 17`, or `1,5,17`) from the supported programs list.  
+> **Tip**: Type `perdanga` for a hidden surprise! 🧀
 
 ### 2. Unattend.xml Creator
 
@@ -59,9 +59,7 @@ Customize your Windows installation with these options:
 - **Bloatware Removal**: Remove unwanted pre-installed apps during setup.
 - **Output**: Saves the `autounattend.xml` file to your Desktop for use with a Windows installation USB.
 
----
-
-## 🛠️ Troubleshooting 
+## 🛠️ Troubleshooting
 
 - **Script Fails to Run**:
 
@@ -81,25 +79,22 @@ Customize your Windows installation with these options:
 
   - Review `install_log_YYYYMMDD_HHMMSS.txt` in the script directory or `%TEMP%` folder for detailed error information.
 
----
-
-## 📜 License 
+## 💖 Credits
 
 This project incorporates code from the following third-party sources:
 
 - **SpotX** (Spotify activation feature)
-
   - Repository: SpotX-Official
   - Copyright © 2025 SpotX-Official
   - License: MIT License
 
 - **Microsoft Activation Scripts** (Windows activation feature)
-
   - Repository: massgravel/Microsoft-Activation-Scripts
   - Copyright © 2025 massgravel
   - License: GPL-3.0
 
+## 📜 License
 
----
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-**Perdanga Forever**
+## ✨ Perdanga Forever
