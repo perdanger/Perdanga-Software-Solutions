@@ -22,7 +22,7 @@
 ---
 ## Overview
 
-Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software using Chocolatey, a powerful package manager for Windows.
+Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
 
 ## Supported Programs
  
