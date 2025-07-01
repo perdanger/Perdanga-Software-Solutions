@@ -1,5 +1,9 @@
 # Perdanga Software Solutions 💡
 
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue)
+![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green)
+![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown)
+
 ![Perdanga Software Solutions GUI](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/1.4.png?raw=true)
 
 ## Overview
@@ -21,10 +25,27 @@ Perdanga Software Solutions is a robust and intuitive PowerShell script designed
 ## Supported Programs
 
 The script automates the installation of key software via Chocolatey:  
-7zip.install, brave, cursoride, discord, file-converter,  
-git, googlechrome, imageglass, nilesoft-shell, nvidia-app,  
-obs-studio, occt, qbittorrent, revo-uninstaller, spotify,  
-steam, telegram, vcredist-all, vlc, winrar, wiztree.
+- 7zip.install
+- brave
+- cursoride
+- discord
+- file-converter
+- git
+- googlechrome
+- imageglass
+- nilesoft-shell
+- nvidia-app
+- obs-studio
+- occt
+- qbittorrent
+- revo-uninstaller
+- spotify
+- steam
+- telegram
+- vcredist-all
+- vlc
+- winrar
+- wiztree
 
 ## Features ⚙️
 
@@ -45,8 +66,6 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
    - Enter the secret word `perdanga` for a hidden cheese! 🧀
 
 2. **Unattend.xml Creator**:
-
-   - Accessible via option `[F]`, this GUI tool allows you to:
      - Configure computer name, admin user, and password settings.
      - Set regional preferences (UI language, system locale, user locale, time zone, keyboard layouts).
      - Enable OOBE bypass options (e.g., skip EULA, local/online account setup, wireless configuration).
