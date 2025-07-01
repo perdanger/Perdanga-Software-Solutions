@@ -15,7 +15,7 @@
 2. **Alternatively, download the archive and run the batch file:**
 
    ```
-  <a href="https://github.com/Parcoil/Sparkle/releases/latest">Download Latest</a>
+   https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip
    ```
 
 > [!IMPORTANT]  
