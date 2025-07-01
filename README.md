@@ -32,16 +32,35 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 ### 1. Main Menu
 
-- **\[A\] Install All Programs**: Installs all supported programs in a single operation.
-- **\[G\] Select Specific Programs**: Choose specific programs to install via a graphical interface.
-- **\[U\] Uninstall Programs**: Remove Chocolatey-installed programs using a GUI.
-- **\[C\] Install Custom Package**: Install a specific Chocolatey package by entering its package ID.
-- **\[T\] Disable Windows Telemetry**: Disables telemetry services and applies registry tweaks for privacy.
-- **\[X\] Activate Spotify**: Applies SpotX enhancements for an optimized Spotify experience.
-- **\[W\] Activate Windows**: Runs an external activation script from get.activated.win.
-- **\[N\] Update Windows**: Checks for and installs the latest Windows updates.
-- **\[F\] Create Unattend.xml File**: Generates an `autounattend.xml` file for automated Windows installation.
-- **\[E\] Exit Script**: Safely exits and disables Chocolatey auto-confirmation.
+- **[A] Install All Programs**  
+  Install the full suite of supported programs with a single command, perfect for setting up a new system quickly.
+
+- **[G] Select Specific Programs**  
+  Choose specific programs to install using a user-friendly graphical interface, giving you precise control over your software setup.
+
+- **[U] Uninstall Programs**  
+  Remove any Chocolatey-installed programs via a convenient GUI, keeping your system clean and organized.
+
+- **[C] Install Custom Package**  
+  Install any specific Chocolatey package by entering its package ID, offering flexibility for custom software needs.
+
+- **[T] Disable Windows Telemetry**  
+  Enhance your privacy by disabling telemetry services and applying registry tweaks to minimize data collection.
+
+- **[X] Activate Spotify**  
+  Unlock an enhanced Spotify experience with SpotX optimizations for a smoother, ad-free listening environment.
+
+- **[W] Activate Windows**  
+  Run an external activation script from `get.activated.win` to activate your Windows installation.
+
+- **[N] Update Windows**  
+  Keep your system up to date by checking for and installing the latest Windows updates with ease.
+
+- **[F] Create Unattend.xml File**  
+  Generate a customized `autounattend.xml` file for automated Windows installations, tailored to your preferences.
+
+- **[E] Exit Script**  
+  Safely exit the script and disable Chocolatey auto-confirmation to ensure a clean shutdown.
 
 > [!TIP]  
 > To install specific programs, enter their numbers (e.g., `1`, `1 5 17`, or `1,5,17`) from the supported programs list.  
