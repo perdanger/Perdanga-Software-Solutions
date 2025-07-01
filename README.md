@@ -2,7 +2,6 @@
 
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue) ![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green) ![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown)
 
-> [!Perdanga Forever]  
 > Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
 
 ## 🚀 Quick Start
