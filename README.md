@@ -4,7 +4,7 @@
 
 > Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
 
-## 🚀 Quick Start
+## Quick Start
 
 1. **Run in PowerShell**:
 
@@ -21,7 +21,7 @@
 > [!IMPORTANT]  
 > Ensure PowerShell is run with **Administrator privileges** to avoid execution issues.
 
-## 📋 Supported Programs
+## Supported Programs
 
 7zip.install, brave, cursoride, discord, file-converter,  
 git, googlechrome, imageglass, nilesoft-shell, nvidia-app,  
@@ -92,4 +92,4 @@ This project incorporates code from the following third-party sources:
   - Copyright © 2025 massgravel
   - License: GPL-3.0
 
-**Perdanga Forever**
+**Perdanga Forever Perdanga Forever Perdanga Forever Perdanga Forever Perdanga Forever Perdanga Forever**
