@@ -20,7 +20,7 @@
    https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip
    ```
 ---
-## Overview 💡
+## Overview 
 
 Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
 
@@ -33,7 +33,7 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 ---
 
-## Features ⚙️
+## ⚙️ Features 
 
 ### 1. Main Menu
 
@@ -64,7 +64,7 @@ Customize your Windows installation with these options:
 
 ---
 
-## Troubleshooting 🛠️
+## 🛠️ Troubleshooting 
 
 - **Script Fails to Run**:
 
@@ -86,7 +86,7 @@ Customize your Windows installation with these options:
 
 ---
 
-## License 📜
+## 📜 License 
 
 This project incorporates code from the following third-party sources:
 
