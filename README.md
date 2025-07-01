@@ -4,10 +4,6 @@
 ![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green)
 ![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown)
 
-## 📋 Overview
-
-Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software using Chocolatey, a powerful package manager for Windows.
-
 ---
 
 ## Quick Start
@@ -24,6 +20,9 @@ Perdanga Software Solutions is a user-friendly PowerShell script designed to sim
    https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip
    ```
 ---
+## Overview
+
+Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software using Chocolatey, a powerful package manager for Windows.
 
 ## Supported Programs
  
