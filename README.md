@@ -1,100 +1,74 @@
-# Perdanga Software Solutions 
+# Perdanga Software Solutions
 
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue)
-![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green)
-![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown)
+![image alt](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/1.3.png?raw=true)
+# Overview
 
----
+Perdanga Software Solutions is a powerful and easy-to-use PowerShell script designed to automate the installation, uninstallation, and management of essential Windows software.
 
-## 📋 Overview
+1. **Run the following command in PowerShell as an Administrator:**
 
-Perdanga Software Solutions is a powerful and user-friendly PowerShell script designed to streamline the **installation**, **uninstallation**, and **management** of essential Windows software using Chocolatey.
+     ```
+     irm https://raw.githubusercontent.com/perdanger/Perdanga-Software-Solutions/main/PerdangaLoader.ps1 | iex
+     ```
+2. **Alternatively, download archive and run the bat file as an Administrator:**
 
-### Quick Start
+    ```
+    https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.3.zip
+    ```
+   
 
-1. **Run in PowerShell (Administrator)**:
-   ```powershell
-   irm https://raw.githubusercontent.com/perdanger/Perdanga-Software-Solutions/main/PerdangaLoader.ps1 | iex
-   ```
+## 💡 Features 
 
-2. **Alternatively, download the archive and run the batch file as an Administrator**:
-   - [Version 1.4](https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip)
-
----
+- **Automated Software Installation**: Install a curated list of essential Windows programs via Chocolatey.
+- **Custom Package Installation**: Install any Chocolatey package by specifying its exact package ID.
+- **Program Uninstallation**: Uninstall Chocolatey-installed programs via a graphical interface.
+- **Dual Interface**: Choose between a command-line interface or a graphical user interface for program selection and uninstallation (GUI availability depends on system configuration).
+- **Windows Updates**: Check and install Windows updates using the PSWindowsUpdate module.
+- **Windows Activation**: Optional activation using an external script from `https://get.activated.win`.
+- **Spotify Activation**: Enhance Spotify with additional features using an external script from SpotX-Official GitHub.
+- **Telemetry Control**: Disable Windows telemetry services and registry settings for enhanced privacy (new in v1.3).
+- **Detailed Logging**: Logs all actions to a timestamped file for easy troubleshooting.
+- **Robust Error Handling**: Includes checks for PowerShell version, administrative privileges, and Chocolatey installation.
 
 ## Supported Programs
-
-The script automates the installation of key software via Chocolatey:  
+ 
 7zip.install, brave, cursoride, discord, file-converter,  
 git, googlechrome, imageglass, nilesoft-shell, nvidia-app,  
 obs-studio, occt, qbittorrent, revo-uninstaller, spotify,  
 steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
----
+## Usage
 
-## ⚙️ Features
+1. **Main Menu**:
+   - The script presents an intuitive menu with the following options:
+     - **\[A\] Install All Programs**
+     - **\[G\] Select Specific Programs via GUI**
+     - **\[U\] Uninstall Programs via GUI**
+     - **\[C\] Install Custom Package**
+     - **\[T\] Disable Windows Telemetry**
+     - **\[X\] Activate Spotify**
+     - **\[W\] Activate Windows**
+     - **\[N\] Update Windows**
+     - **\[E\] Exit Script**
+   - Alternatively, enter program numbers (e.g., '`1`' '`1 5 17`', or '`1,5,17`') to install specific programs from the predefined list.
 
-### 1. Main Menu
+## Troubleshooting
 
-The script offers an intuitive CLI menu with the following options:
+- **Script Fails to Run**: Ensure `RunPerdangaSoftwareSolutions.bat` is run as Administrator or the PowerShell command is executed with administrative privileges.
+- **PowerShell Version Error**: Upgrade to PowerShell 5 or higher.
+- **GUI Unavailable**: If options `G` or `U` fail, your system may lack `System.Windows.Forms`. Use CLI options instead.
+- **Package Not Found**: For option `C`, ensure the entered package ID is valid and exists in the Chocolatey repository.
+- **Check Logs**: Review `install_log_YYYYMMDD_HHMMSS.txt` for detailed error messages.
 
-- **[A] Install All Programs**: Install all supported programs in one go.
-- **[G] Select Specific Programs**: Choose programs to install using a graphical interface.
-- **[U] Uninstall Programs**: Remove Chocolatey-installed programs via a GUI.
-- **[C] Install Custom Package**: Install a specific Chocolatey package by entering its ID.
-- **[T] Disable Windows Telemetry**: Disable telemetry services and tweak registry settings.
-- **[X] Activate Spotify**: Apply SpotX enhancements for an improved Spotify experience.
-- **[W] Activate Windows**: Run an external activation script from [get.activated.win](https://get.activated.win).
-- **[N] Update Windows**: Check for and install the latest Windows updates.
-- **[F] Create Unattend.xml File**: Generate an `autounattend.xml` file for automated Windows setup.
-- **[E] Exit Script**: Safely exit and disable Chocolatey auto-confirmation.
-
-Enter program numbers (e.g., `1`, `1 5 17`, or `1,5,17`) to install specific programs from the list.  
-Type `perdanga` for a hidden surprise! 🧀
-
-### 2. Unattend.xml Creator
-
-Customize your Windows setup with the following options:
-- **System Settings**: Configure computer name, admin user, and password.
-- **Regional Preferences**: Set UI language, system locale, user locale, time zone, and keyboard layouts.
-- **OOBE Bypass**: Skip EULA, local/online account setup, and wireless configuration.
-- **System Tweaks**: Show file extensions, disable SmartScreen, enable system restore, or disable app suggestions.
-- **Bloatware Removal**: Remove unwanted apps during Windows setup.
-- **Output**: Saves the `autounattend.xml` file to your Desktop for use with a Windows installation USB.
-
----
-
-## 🛠️ Troubleshooting
-
-- **Script Fails to Run**:
-  - Ensure you run the script or `RunPerdangaSoftwareSolutions.bat` with **Administrator privileges**.
-  - Verify PowerShell 5.1 or higher: `$PSVersionTable.PSVersion`.
-
-- **GUI Unavailable**:
-  - If `[G]`, `[U]`, or `[F]` options fail, your system may lack `System.Windows.Forms`. Use CLI alternatives.
-
-- **Package Not Found**:
-  - For `[C]`, verify the package ID in the Chocolatey repository: `choco search <id>`.
-
-- **Logs**:
-  - Check `install_log_YYYYMMDD_HHMMSS.txt` in the script directory or TEMP folder for errors.
-
----
-
-## 📜 License
+## License
 
 This project incorporates code from the following third-party sources:
 
-- **SpotX** (Spotify activation feature)
-  - Repository: [SpotX-Official](https://github.com/SpotX-Official/SpotX)
-  - Copyright © 2025 SpotX-Official
+- **SpotX**: Used for Spotify activation feature.
+  - Repository: https://github.com/SpotX-Official/SpotX
+  - Copyright (c) 2025 SpotX-Official
   - License: MIT License
-
-- **Microsoft Activation Scripts** (Windows activation feature)
-  - Repository: [massgravel/Microsoft-Activation-Scripts](https://github.com/massgravel/Microsoft-Activation-Scripts)
-  - Copyright © 2025 massgravel
+- **Microsoft Activation Scripts**: Used for Windows activation feature.
+  - Repository: https://github.com/massgravel/Microsoft-Activation-Scripts
+  - Copyright (c) 2025 massgravel
   - License: GPL-3.0
-
----
-
-*Perdanga Forever*
