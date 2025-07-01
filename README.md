@@ -1,6 +1,8 @@
 # Perdanga Software Solutions 💡
 
-![Perdanga Software Solutions GUI](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/1.4.png?raw=true)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue)
+![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green)
+![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown)
 
 ---
 
