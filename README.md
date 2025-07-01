@@ -5,6 +5,7 @@
 ![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown)
 
 ---
+Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
 
 ## Quick Start
 
@@ -20,10 +21,6 @@
    https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip
    ```
 ---
-## Overview 
-
-Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
-
 ## Supported Programs
  
 7zip.install, brave, cursoride, discord, file-converter,  
