@@ -1,6 +1,7 @@
 # Perdanga Software Solutions 💡
 
 ![Perdanga Software Solutions GUI](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/1.4.png?raw=true)
+
 ## Overview
 
 Perdanga Software Solutions is a robust and intuitive PowerShell script designed to simplify the installation, uninstallation, and management of essential Windows software.
@@ -19,29 +20,11 @@ Perdanga Software Solutions is a robust and intuitive PowerShell script designed
 
 ## Supported Programs
 
-The script automates the installation of the following essential software via Chocolatey:
-
-- 7zip.install
-- brave
-- cursoride
-- discord
-- file-converter
-- git
-- googlechrome
-- imageglass
-- nilesoft-shell
-- nvidia-app
-- obs-studio
-- occt
-- qbittorrent
-- revo-uninstaller
-- spotify
-- steam
-- telegram
-- vcredist-all
-- vlc
-- winrar
-- wiztree
+The script automates the installation of key software via Chocolatey:  
+7zip.install, brave, cursoride, discord, file-converter,  
+git, googlechrome, imageglass, nilesoft-shell, nvidia-app,  
+obs-studio, occt, qbittorrent, revo-uninstaller, spotify,  
+steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 ## Features ⚙️
 
@@ -58,7 +41,7 @@ The script automates the installation of the following essential software via Ch
      - **\[N\] Update Windows**: Check for and install the latest Windows updates.
      - **\[F\] Create Unattend.xml File**: Generate an `autounattend.xml` file for automated Windows setup.
      - **\[E\] Exit Script**: Safely exit the script and disable Chocolatey auto-confirmation.
-   - Alternatively, enter program numbers (e.g., `1`, `1 5 17`, or `1,5,17`) to install specific programs from the list.
+   - Alternatively, enter program names (e.g., `1`, `1 5 17`, or `1,5,17`) to install specific programs from the list.
    - Enter the secret word `perdanga` for a hidden cheese! 🧀
 
 2. **Unattend.xml Creator**:
