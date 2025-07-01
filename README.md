@@ -2,18 +2,18 @@
 
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue) ![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green) ![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown)
 
-> [!NOTE]  
+> [!Perdanga Forever]  
 > Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
 
 ## 🚀 Quick Start
 
-1. **Run in PowerShell (Administrator)**:
+1. **Run in PowerShell**:
 
    ```powershell
    irm https://raw.githubusercontent.com/perdanger/Perdanga-Software-Solutions/main/PerdangaLoader.ps1 | iex
    ```
 
-2. **Alternatively, download the archive and run the batch file as an Administrator:**
+2. **Alternatively, download the archive and run the batch file:**
 
    ```
    https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip
@@ -46,7 +46,7 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 > [!TIP]  
 > To install specific programs, enter their numbers (e.g., `1`, `1 5 17`, or `1,5,17`) from the supported programs list.  
-> **Tip**: Type `perdanga` for a hidden surprise! 🧀
+> Type `perdanga` for a hidden surprise! 🧀
 
 ### 2. Unattend.xml Creator
 
