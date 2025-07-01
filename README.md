@@ -30,7 +30,7 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 ---
 
-## 📍 Features 
+## 💥 Features 
 
 ### 1. Main Menu
 
