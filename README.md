@@ -15,7 +15,7 @@
 2. **Alternatively, download the archive and run the batch file:**
 
    ```
-   https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip
+   https://github.com/perdanger/Perdanga-Software-Solutions/releases/latest
    ```
 
 > [!IMPORTANT]  
