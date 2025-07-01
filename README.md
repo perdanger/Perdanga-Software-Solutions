@@ -18,7 +18,7 @@ Perdanga Software Solutions is a powerful and user-friendly PowerShell script de
    ```
 
 2. **Alternatively, download the archive and run the batch file as an Administrator**:
-   - Download the archive: [Version 1.4](https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip)
+   - [Version 1.4](https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip)
 
 ---
 
