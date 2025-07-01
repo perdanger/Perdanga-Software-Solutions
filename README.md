@@ -78,7 +78,7 @@ Customize your Windows installation with these options:
 
   - Review `install_log_YYYYMMDD_HHMMSS.txt` in the script directory or `%TEMP%` folder for detailed error information.
 
-## 💖 Credits
+## 📜 Credits
 
 This project incorporates code from the following third-party sources:
 
@@ -92,8 +92,4 @@ This project incorporates code from the following third-party sources:
   - Copyright © 2025 massgravel
   - License: GPL-3.0
 
-## 📜 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-## ✨ Perdanga Forever
+**Perdanga Forever**
