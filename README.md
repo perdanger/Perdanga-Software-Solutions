@@ -27,38 +27,17 @@ Perdanga Software Solutions is a user-friendly PowerShell script designed to sim
 ---
 
 ## Supported Programs
-
-The script supports the following Chocolatey packages:
-
-- 7zip.install
-- brave
-- cursoride
-- discord
-- file-converter
-- git
-- googlechrome
-- imageglass
-- nilesoft-shell
-- nvidia-app
-- obs-studio
-- occt
-- qbittorrent
-- revo-uninstaller
-- spotify
-- steam
-- telegram
-- vcredist-all
-- vlc
-- winrar
-- wiztree
+ 
+7zip.install, brave, cursoride, discord, file-converter,  
+git, googlechrome, imageglass, nilesoft-shell, nvidia-app,  
+obs-studio, occt, qbittorrent, revo-uninstaller, spotify,  
+steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 ---
 
 ## ⚙️ Features
 
 ### 1. Main Menu
-
-The script provides an intuitive command-line interface (CLI) with the following options:
 
 - **\[A\] Install All Programs**: Installs all supported programs in a single operation.
 - **\[G\] Select Specific Programs**: Choose specific programs to install via a graphical interface.
