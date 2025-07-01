@@ -18,10 +18,11 @@ Perdanga Software Solutions is a user-friendly PowerShell script designed to sim
    irm https://raw.githubusercontent.com/perdanger/Perdanga-Software-Solutions/main/PerdangaLoader.ps1 | iex
    ```
 
-2. **Alternatively, download the archive and run the batch file as Administrator**:
+2. **Alternatively, download the archive and run the batch file as an Administrator:**
 
-   - Version 1.4
-
+   ```
+   https://github.com/perdanger/Perdanga-Software-Solutions/archive/refs/tags/1.4.zip
+   ```
 ---
 
 ## Supported Programs
@@ -102,7 +103,6 @@ This project incorporates code from the following third-party sources:
   - Copyright © 2025 massgravel
   - License: GPL-3.0
 
-Perdanga Software Solutions is licensed under the MIT License.
 
 ---
 
