@@ -48,14 +48,13 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 - **[N] Update Windows**  
 
-- **[F] Create Unattend.xml File**  
-  Generate a customized `autounattend.xml` file for automated Windows installations, tailored to your preferences.
+- **[F] Create Unattend.xml File**
 
 > [!TIP]  
 > To install specific programs, enter their numbers (e.g., `1`, `1 5 17`, or `1,5,17`) from the supported programs list.  
 > Type `perdanga` for a hidden surprise! 🧀
 
-### 2. Unattend.xml Creator
+### 2. Unattend.xml Creator [F]
 
 Customize your Windows installation with these options:
 
