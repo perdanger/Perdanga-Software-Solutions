@@ -49,7 +49,7 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 - **[F] Create Unattend.xml File**
 
 > [!TIP]  
-> To install specific programs, enter their numbers (e.g., `1`, `1 5 17`, or `1,5,17`) from the supported programs list.  
+> To install specific programs, enter their numbers (e.g., `1 5 17`, or `1,5,17`) from the supported programs list.  
 > Type `perdanga` for a hidden cheese! 🧀
 
 ### 2. Unattend.xml Creator [F]
