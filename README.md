@@ -17,7 +17,7 @@
 2. **[Direct Download the Latest Version](https://github.com/perdanger/Perdanga-Software-Solutions/releases/download/1.4/PSS.1.4.rar)**
 
 > [!IMPORTANT]  
-> Ensure PowerShell is run with **Administrator privileges** to avoid execution issues.
+> Ensure is run with **Administrator privileges** to avoid execution issues.
 
 ## Supported Programs
 
