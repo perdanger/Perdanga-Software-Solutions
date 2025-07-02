@@ -50,7 +50,7 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 > [!TIP]  
 > To install specific programs, enter their numbers (e.g., `1`, `1 5 17`, or `1,5,17`) from the supported programs list.  
-> Type `perdanga` for a hidden surprise! 🧀
+> Type `perdanga` for a hidden cheese! 🧀
 
 ### 2. Unattend.xml Creator [F]
 
