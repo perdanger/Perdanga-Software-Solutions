@@ -14,7 +14,7 @@
    irm https://raw.githubusercontent.com/perdanger/Perdanga-Software-Solutions/main/PerdangaLoader.ps1 | iex
    ```
 
-2. **[Direct Download the Latest Version](https://github.com/perdanger/Perdanga-Software-Solutions/releases/latest)**
+2. **[Direct Download the Latest Version](https://github.com/perdanger/Perdanga-Software-Solutions/releases/download/1.4/PSS.1.4.rar)**
 
 > [!IMPORTANT]  
 > Ensure PowerShell is run with **Administrator privileges** to avoid execution issues.
