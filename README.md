@@ -4,7 +4,7 @@
 
 ![Perdanga Forever](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/PSS%201.4.png?raw=true)
 
-> Perdanga Software Solutions is a user-friendly PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
+> Perdanga Software Solutions is a PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
 
 ## Quick Start
 
