@@ -1,13 +1,6 @@
 <#
 .SYNOPSIS
     Configuration file for Perdanga Software Solutions.
-
-.DESCRIPTION
-    This file contains all the user-configurable variables for the main script,
-    such as the list of programs to install.
-
-.NOTES
-    This script is dot-sourced by the main script and runs in its scope.
 #>
 
 # --- PROGRAM DEFINITIONS ---
