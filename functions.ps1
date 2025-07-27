@@ -1,13 +1,6 @@
 <#
 .SYNOPSIS
     Functions library for Perdanga Software Solutions.
-
-.DESCRIPTION
-    This file contains all the helper functions used by the main script.
-    It is dot-sourced to make these functions available in the main script's scope.
-
-.NOTES
-    This script should not be run directly.
 #>
 
 # Function to write messages to console and log file
