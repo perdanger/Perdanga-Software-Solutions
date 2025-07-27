@@ -1,14 +1,6 @@
 <#
 .SYNOPSIS
     Main script for Perdanga Software Solutions to install and manage programs using Chocolatey.
-
-.DESCRIPTION
-    This is the main entry point for the script. It loads configuration and functions from separate
-    files, performs initial checks, initializes Chocolatey, and then enters the main user interaction loop.
-
-.NOTES
-    Author: Roman Zhdanov
-    Version: 1.3 (Telemetry Control)
 #>
 
 # --- INITIAL SETUP ---
