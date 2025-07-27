@@ -1,23 +1,22 @@
 <#
-================================================================================
-================================================================================
-                                 PART 1: FUNCTIONS
-================================================================================
-================================================================================
-#>
-
-<#
 .SYNOPSIS
     Author: Roman Zhdanov
-    Version: 1.4
+    Version: 1.5
+    Last Modified: 28.07.2025
 .DESCRIPTION
-    This file contains all the helper functions used by the main script.
-    It is dot-sourced to make these functions available in the main script's scope.
-.NOTES
-    This script should not be run directly.
+    Perdanga Software Solutions is a PowerShell script designed to simplify the installation, 
+    uninstallation, and management of essential Windows software.
+
+DISCLAIMER: This script contains features that download and execute third-party scripts. 
+(https://github.com/SpotX-Official/SpotX)
+(https://github.com/massgravel/Microsoft-Activation-Scripts)
 #>
 
-# Set log file name with timestamp and use script directory
+# ================================================================================
+#                                 PART 1: INITIALIZATION
+# ================================================================================
+
+# Set log file name with a timestamp and use the script's directory.
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 # When run from `irm | iex`, $PSScriptRoot is not available. Default to a temp path.
 $scriptDir = $PSScriptRoot
@@ -26,41 +25,65 @@ if ([string]::IsNullOrEmpty($scriptDir)) {
 }
 $script:logFile = Join-Path -Path $scriptDir -ChildPath "install_log_$timestamp.txt"
 
+# ================================================================================
+#                                 PART 2: CORE FUNCTIONS
+# ================================================================================
 
-# Function to write messages to console and log file
+# ENHANCED FUNCTION: Writes messages to both the console and the log file.
+# Automatically prefixes messages with "ERROR:" or "WARNING:" based on HostColor
+# for standardized output and cleaner calling code.
 function Write-LogAndHost {
     param (
         [string]$Message,
-        [string]$LogPrefix = "",
+        [string]$LogPrefix = "", # Optional context, e.g., function name.
         [string]$HostColor = "White",
         [switch]$NoLog,
         [switch]$NoHost,
         [switch]$NoNewline
     )
-    $fullLogMessage = "[$((Get-Date))] $LogPrefix$Message"
+
+    # Standardize host output for errors and warnings.
+    $hostOutput = $Message
+    $logOutput = $Message 
+    
+    if ($HostColor -eq 'Red' -and -not ($Message -match '^(ERROR|FATAL)')) {
+        $hostOutput = "ERROR: $Message"
+        $logOutput = "ERROR: $Message"
+    }
+    elseif (($HostColor -eq 'Yellow' -or $HostColor -eq 'DarkYellow') -and -not ($Message -match '^WARNING')) {
+        $hostOutput = "WARNING: $Message"
+        $logOutput = "WARNING: $Message"
+    }
+    
+    # Construct the full log message with a timestamp.
+    $fullLogMessage = "[$((Get-Date))] "
+    if (-not [string]::IsNullOrEmpty($LogPrefix)) {
+        $fullLogMessage += "[$LogPrefix] "
+    }
+    $fullLogMessage += $logOutput
+
     if (-not $NoLog) {
-        # This line will now work correctly from the beginning
         try {
             $fullLogMessage | Out-File -FilePath $script:logFile -Append -Encoding UTF8 -ErrorAction Stop
         }
         catch {
+            # Critical failure, bypass our own function to avoid loops.
             Write-Host "FATAL: Could not write to log file at $($script:logFile). Error: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
     if (-not $NoHost) {
         if ($NoNewline) {
-            Write-Host $Message -ForegroundColor $HostColor -NoNewline
+            Write-Host $hostOutput -ForegroundColor $HostColor -NoNewline
         } else {
-            Write-Host $Message -ForegroundColor $HostColor
+            Write-Host $hostOutput -ForegroundColor $HostColor
         }
     }
 }
 
-# Function to install Chocolatey
+# Function to install Chocolatey if it's not present.
 function Install-Chocolatey {
     try {
-        # ENHANCEMENT: Log the user prompt for better traceability.
-        Write-LogAndHost "Chocolatey is not installed. Would you like to install it? (Type y/n then press Enter)" -HostColor Yellow
+        Write-LogAndHost "Chocolatey is not installed. Would you like to install it? (Type y/n then press Enter)" -HostColor Yellow -LogPrefix "Install-Chocolatey"
         $confirmInput = Read-Host
         if ($confirmInput.Trim().ToLower() -eq 'y') {
             Write-LogAndHost "User chose to install Chocolatey." -NoHost
@@ -68,19 +91,20 @@ function Install-Chocolatey {
                 Write-LogAndHost "Installing Chocolatey..." -NoLog
                 Set-ExecutionPolicy Bypass -Scope Process -Force
                 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+                # The official Chocolatey installation command.
                 $installOutput = Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) 2>&1
                 $installOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
                 if ($LASTEXITCODE -eq 0) {
                     Write-LogAndHost "Chocolatey installed successfully." -HostColor Green
-                    # Refresh environment variables to ensure choco is available
+                    # Refresh environment variables to ensure 'choco' is available in the current session.
                     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
                     return $true
                 } else {
-                    Write-LogAndHost "ERROR: Failed to install Chocolatey. Exit code: $LASTEXITCODE. Details: $($installOutput | Out-String)" -HostColor Red -LogPrefix "Error installing Chocolatey. "
+                    Write-LogAndHost "Failed to install Chocolatey. Exit code: $LASTEXITCODE. Details: $($installOutput | Out-String)" -HostColor Red -LogPrefix "Install-Chocolatey"
                     return $false
                 }
             } catch {
-                Write-LogAndHost "ERROR: Exception occurred while installing Chocolatey - $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during Chocolatey installation - "
+                Write-LogAndHost "Exception occurred while installing Chocolatey - $($_.Exception.Message)" -HostColor Red -LogPrefix "Install-Chocolatey"
                 return $false
             }
         } else {
@@ -88,66 +112,64 @@ function Install-Chocolatey {
             return $false
         }
     } catch {
-        Write-LogAndHost "ERROR: Could not read user input for Chocolatey installation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Failed to read user input for Chocolatey installation - "
+        Write-LogAndHost "Could not read user input for Chocolatey installation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Install-Chocolatey"
         return $false
     }
 }
 
-# Function to perform Windows activation
+# Function to perform Windows activation using an external script.
 function Invoke-WindowsActivation {
     $script:activationAttempted = $true
-    # ENHANCEMENT: Warnings should be logged for audit purposes.
-    Write-LogAndHost "WARNING: Windows activation uses an external script from 'https://get.activated.win'. Ensure you trust the source before proceeding." -HostColor Yellow
+    Write-LogAndHost "Windows activation uses an external script from 'https://get.activated.win'. Ensure you trust the source before proceeding." -HostColor Yellow -LogPrefix "Invoke-WindowsActivation"
     try {
-        # ENHANCEMENT: Log the user prompt.
-        Write-LogAndHost "Continue with Windows activation? (Type y/n then press Enter)" -HostColor Yellow
+        Write-LogAndHost "Continue with Windows activation? (Type y/n then press Enter)" -HostColor Yellow -LogPrefix "Invoke-WindowsActivation"
         $confirmActivation = Read-Host
         if ($confirmActivation.Trim().ToLower() -ne 'y') {
             Write-LogAndHost "Windows activation cancelled by user." -HostColor Yellow
             return
         }
     } catch {
-        Write-LogAndHost "ERROR: Could not read user input for Windows activation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Failed to read user input for Windows activation - "
+        Write-LogAndHost "Could not read user input for Windows activation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-WindowsActivation"
         return
     }
     Write-LogAndHost "Attempting Windows activation..." -NoHost
     try {
-        # Ensure TLS 1.2 for the activation script download
+        # Ensure TLS 1.2 for the activation script download.
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         
         $activationScriptContent = Invoke-RestMethod -Uri "https://get.activated.win" -UseBasicParsing
+        # Execute the script and show its output directly to the user while also logging it.
         Invoke-Expression -Command $activationScriptContent 2>&1 | Tee-Object -FilePath $script:logFile -Append | ForEach-Object { Write-Host $_ -ForegroundColor Gray }
         
-        if ($LASTEXITCODE -eq 0) { # This might not be reliable for iex from irm
+        if ($LASTEXITCODE -eq 0) { 
             Write-LogAndHost "Windows activation script executed. Check console output above for status."
         }
         else {
-            Write-LogAndHost "Windows activation script execution might have failed. Exit code: $LASTEXITCODE" -HostColor Yellow
+            Write-LogAndHost "Windows activation script execution might have failed. Exit code: $LASTEXITCODE" -HostColor Yellow -LogPrefix "Invoke-WindowsActivation"
         }
     }
     catch {
-        Write-LogAndHost "ERROR: Exception during Windows activation - $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during Windows activation - "
+        Write-LogAndHost "Exception during Windows activation - $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-WindowsActivation"
     }
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
     $null = Read-Host
 }
 
-# Function to apply SpotX
+# Function to apply SpotX modifications to Spotify.
 function Invoke-SpotXActivation {
     Write-LogAndHost "Attempting Spotify Activation..." -HostColor Cyan
     Write-LogAndHost "INFO: This process modifies your Spotify client. It is recommended to close Spotify before proceeding." -HostColor Yellow
-    Write-LogAndHost "WARNING: This script downloads and executes code from the internet (SpotX-Official GitHub). Ensure you trust the source." -HostColor Yellow
+    Write-LogAndHost "This script downloads and executes code from the internet (SpotX-Official GitHub). Ensure you trust the source." -HostColor Yellow -LogPrefix "Invoke-SpotXActivation"
 
     try {
-        # ENHANCEMENT: Log the user prompt.
-        Write-LogAndHost "Continue with Spotify Activation? (Type y/n then press Enter)" -HostColor Yellow
+        Write-LogAndHost "Continue with Spotify Activation? (Type y/n then press Enter)" -HostColor Yellow -LogPrefix "Invoke-SpotXActivation"
         $confirmSpotX = Read-Host
         if ($confirmSpotX.Trim().ToLower() -ne 'y') {
             Write-LogAndHost "Spotify Activation cancelled by user." -HostColor Yellow
             return
         }
     } catch {
-        Write-LogAndHost "ERROR: Could not read user input for Spotify Activation confirmation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Failed to read user input for Spotify Activation confirmation - "
+        Write-LogAndHost "Could not read user input for Spotify Activation confirmation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-SpotXActivation"
         return
     }
 
@@ -165,13 +187,13 @@ function Invoke-SpotXActivation {
         $scriptContentToExecute = (Invoke-WebRequest -UseBasicParsing -Uri $spotxUrlPrimary -ErrorAction Stop).Content
         Write-LogAndHost "Successfully downloaded from primary URL." -NoHost
     } catch {
-        Write-LogAndHost "Primary SpotX URL failed. Error: $($_.Exception.Message)" -HostColor DarkYellow -LogPrefix "SpotX Primary Download Failed: "
+        Write-LogAndHost "Primary SpotX URL failed. Error: $($_.Exception.Message)" -HostColor DarkYellow -LogPrefix "Invoke-SpotXActivation"
         Write-LogAndHost "Attempting fallback URL: $spotxUrlFallback" -NoHost
         try {
             $scriptContentToExecute = (Invoke-WebRequest -UseBasicParsing -Uri $spotxUrlFallback -ErrorAction Stop).Content
             Write-LogAndHost "Successfully downloaded from fallback URL." -NoHost
         } catch {
-            Write-LogAndHost "ERROR: Fallback SpotX URL also failed. Error: $($_.Exception.Message)" -HostColor Red -LogPrefix "SpotX Fallback Download Failed: "
+            Write-LogAndHost "Fallback SpotX URL also failed. Error: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-SpotXActivation"
             Write-LogAndHost "Spotify Activation cannot proceed." -HostColor Red
             $_ | Out-File -FilePath $script:logFile -Append -Encoding UTF8
             Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
@@ -187,25 +209,26 @@ function Invoke-SpotXActivation {
             Invoke-Expression -Command $fullScriptToRun 2>&1 | Tee-Object -FilePath $script:logFile -Append | ForEach-Object { Write-Host $_ }
             Write-LogAndHost "SpotX script execution attempt finished. Check console output from SpotX above for status." -HostColor Green
         } catch {
-            Write-LogAndHost "ERROR: Exception occurred during SpotX script execution. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during SpotX execution - "
+            Write-LogAndHost "Exception occurred during SpotX script execution. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-SpotXActivation"
             $_ | Out-File -FilePath $script:logFile -Append -Encoding UTF8
         }
     } else {
-        Write-LogAndHost "ERROR: Failed to obtain SpotX script content." -HostColor Red
+        Write-LogAndHost "Failed to obtain SpotX script content." -HostColor Red -LogPrefix "Invoke-SpotXActivation"
     }
 
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
     $null = Read-Host
 }
 
-# Function to perform Windows update
+# Function to check for and install Windows updates using the PSWindowsUpdate module.
 function Invoke-WindowsUpdate {
     Write-LogAndHost "Checking for Windows updates..."
     Set-ExecutionPolicy Bypass -Scope Process -Force
     try {
+        # Check if the required module is available, and install it if not.
         if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
             Write-LogAndHost "PSWindowsUpdate module not found. Installing..."
-            Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser -ErrorAction Stop
+            Install-Module -Name PSWindowsUpdate -Force -Scope CurrentUser -ErrorAction Stop -AcceptLicense
             Write-LogAndHost "PSWindowsUpdate module installed successfully for current user."
         }
         Import-Module PSWindowsUpdate -ErrorAction Stop
@@ -219,43 +242,44 @@ function Invoke-WindowsUpdate {
             Write-LogAndHost "No updates available."
         }
     } catch {
-        Write-LogAndHost "ERROR: Failed to update Windows. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Error during Windows update: "
+        Write-LogAndHost "Failed to update Windows. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-WindowsUpdate"
     }
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
     $null = Read-Host
 }
 
-# Function to disable Windows Telemetry
+# Function to disable common Windows Telemetry services and registry keys.
 function Invoke-DisableTelemetry {
     Write-LogAndHost "Checking Windows Telemetry status..." -HostColor Cyan
     
     $telemetryService = Get-Service -Name "DiagTrack" -ErrorAction SilentlyContinue
     $telemetryRegValue = Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Name "AllowTelemetry" -ErrorAction SilentlyContinue
 
+    # Check if telemetry already appears to be disabled to avoid unnecessary work.
     if ($telemetryService -and $telemetryService.StartType -eq 'Disabled' -and $telemetryRegValue -and $telemetryRegValue.AllowTelemetry -eq 0) {
         Write-LogAndHost "Windows Telemetry appears to be already disabled." -HostColor Green
-        Write-LogAndHost "No changes were made." -HostColor Green
+        Write-LogAndHost "No changes were made."
         Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
         $null = Read-Host
         return
     }
     
     try {
-        # ENHANCEMENT: Log the user prompt.
-        Write-LogAndHost "Telemetry is currently enabled. Continue with disabling? (Type y/n then press Enter)" -HostColor Yellow
+        Write-LogAndHost "Telemetry is currently enabled. Continue with disabling? (Type y/n then press Enter)" -HostColor Yellow -LogPrefix "Invoke-DisableTelemetry"
         $confirmTelemetry = Read-Host
         if ($confirmTelemetry.Trim().ToLower() -ne 'y') {
             Write-LogAndHost "Telemetry disabling cancelled by user." -HostColor Yellow
             return
         }
     } catch {
-        Write-LogAndHost "ERROR: Could not read user input for Telemetry confirmation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Failed to read user input for Telemetry confirmation - "
+        Write-LogAndHost "Could not read user input for Telemetry confirmation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-DisableTelemetry"
         return
     }
 
     Write-LogAndHost "Applying telemetry settings..." -NoHost
     
     try {
+        # List of services related to telemetry.
         $servicesToDisable = @("DiagTrack", "dmwappushservice")
         foreach ($serviceName in $servicesToDisable) {
             $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
@@ -265,9 +289,9 @@ function Invoke-DisableTelemetry {
                     Stop-Service -Name $serviceName -Force -ErrorAction Stop
                     Write-LogAndHost "Disabling service: $serviceName..." -NoLog
                     Set-Service -Name $serviceName -StartupType Disabled -ErrorAction Stop
-                    Write-LogAndHost "$serviceName service stopped and disabled." -HostColor Green
+                    Write-LogAndHost "$serviceName service stopped and disabled."
                 } catch {
-                    Write-LogAndHost "ERROR: Could not stop or disable service '$serviceName'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Telemetry Service Error: "
+                    Write-LogAndHost "Could not stop or disable service '$serviceName'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-DisableTelemetry"
                 }
             } else {
                 Write-LogAndHost "Service '$serviceName' not found, skipping." -HostColor DarkGray -NoLog
@@ -276,6 +300,7 @@ function Invoke-DisableTelemetry {
 
         Write-LogAndHost "Configuring registry keys..." -NoLog
         
+        # A collection of registry keys to disable telemetry and related features.
         $regKeys = @{
             "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" = @{ Name = "AllowTelemetry"; Value = 0; Type = "DWord" };
             "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection" = @{ Name = "AllowTelemetry"; Value = 0; Type = "DWord" };
@@ -287,125 +312,424 @@ function Invoke-DisableTelemetry {
         foreach ($path in $regKeys.Keys) {
             $keyInfo = $regKeys[$path]
             try {
+                # Create the registry path if it doesn't exist.
                 if (-not (Test-Path $path)) {
                     Write-LogAndHost "Creating registry path: $path" -NoLog
                     New-Item -Path $path -Force -ErrorAction Stop | Out-Null
                 }
                 Set-ItemProperty -Path $path -Name $keyInfo.Name -Value $keyInfo.Value -Type $keyInfo.Type -Force -ErrorAction Stop
-                Write-LogAndHost "Successfully set registry value '$($keyInfo.Name)' at '$path'." -NoLog
+                Write-LogAndHost "Successfully set registry value '$($keyInfo.Name)' at '$path'." -NoHost
             } catch {
-                Write-LogAndHost "ERROR: Failed to set registry key at '$path'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Telemetry Registry Error: "
+                Write-LogAndHost "Failed to set registry key at '$path'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-DisableTelemetry"
             }
         }
         
         Write-LogAndHost "Telemetry has been successfully disabled." -HostColor Green
     } catch {
-        Write-LogAndHost "ERROR: An unexpected error occurred while disabling telemetry. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Telemetry Global Error: "
+        Write-LogAndHost "An unexpected error occurred while disabling telemetry. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-DisableTelemetry"
     }
 
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
     $null = Read-Host
 }
 
-# Function to install programs using Chocolatey
-function Install-Programs {
-    param (
-        [string[]]$ProgramsToInstall,
-        [string]$Source = "https://community.chocolatey.org/api/v2/"
-    )
+# ENHANCED FUNCTION (v1.5): Displays key system information, including Video Card.
+function Show-SystemInfo {
+    Write-LogAndHost "Gathering system information..." -HostColor Cyan -LogPrefix "Show-SystemInfo"
+    $infoOutput = New-Object System.Collections.Generic.List[string]
+    $line = "-" * 60
+    $infoOutput.Add($line)
+    $infoOutput.Add(" System Information")
+    $infoOutput.Add($line)
 
-    if ($ProgramsToInstall.Count -eq 0) {
-        Write-LogAndHost "No programs to install." -HostColor Yellow
-        return $true
-    }
-
-    $allSuccess = $true
-    Write-LogAndHost "Starting installation of $($ProgramsToInstall.Count) program(s)..." -HostColor Cyan
-    Write-Host ""
-
-    foreach ($program in $ProgramsToInstall) {
-        Write-LogAndHost "Installing $program..." -LogPrefix "Installing $program (from list)..."
-        try {
-            $installOutput = & choco install $program -y --source=$Source --no-progress 2>&1
-            $installOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
-
-            if ($LASTEXITCODE -eq 0) {
-                # ENHANCEMENT: More robust check for already installed packages
-                if ($installOutput -match "is already installed|already installed|Nothing to do") {
-                    Write-LogAndHost "$program is already installed or up to date." -HostColor Green
-                } else {
-                    Write-LogAndHost "$program installed successfully." -HostColor White
-                }
-            } else {
-                $allSuccess = $false
-                Write-LogAndHost "ERROR: Failed to install $program. Exit code: $LASTEXITCODE. Details: $($installOutput | Out-String)" -HostColor Red -LogPrefix "Error installing $program. "
+    try {
+        # OS Info
+        $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
+        $infoOutput.Add(" OS Name: $($osInfo.Caption)")
+        $infoOutput.Add(" OS Version: $($osInfo.Version)")
+        
+        # CPU Info
+        $cpuInfo = Get-CimInstance -ClassName Win32_Processor
+        $infoOutput.Add(" Processor: $($cpuInfo.Name.Trim())")
+        
+        # RAM Info
+        $ramInfo = Get-CimInstance -ClassName Win32_ComputerSystem
+        $ramGB = [math]::Round($ramInfo.TotalPhysicalMemory / 1GB, 2)
+        $infoOutput.Add(" Installed RAM: $($ramGB) GB")
+        
+        $infoOutput.Add($line)
+        $infoOutput.Add(" Network Information")
+        $infoOutput.Add($line)
+        
+        # Network Info
+        $netAdapters = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled }
+        if ($netAdapters) {
+            foreach ($adapter in $netAdapters) {
+                $infoOutput.Add(" Description: $($adapter.Description)")
+                $infoOutput.Add("   IP Address: $($adapter.IPAddress -join ', ')")
+                $infoOutput.Add("   MAC Address: $($adapter.MACAddress)")
+                $infoOutput.Add("")
             }
-        } catch {
-            $allSuccess = $false
-            Write-LogAndHost "ERROR: Exception occurred while installing $program. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during installation of $program - "
+        } else {
+            $infoOutput.Add(" No active network adapters with an IP address found.")
         }
-        Write-Host ""
+
+        $infoOutput.Add($line)
+        $infoOutput.Add(" Disk Information")
+        $infoOutput.Add($line)
+
+        # Disk Info
+        $disks = Get-CimInstance -ClassName Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }
+        if ($disks) {
+             foreach ($disk in $disks) {
+                $sizeGB = [math]::Round($disk.Size / 1GB, 2)
+                $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+                $percentFree = [math]::Round(($disk.FreeSpace / $disk.Size) * 100, 2)
+                $infoOutput.Add(" Drive: $($disk.DeviceID)")
+                $infoOutput.Add("   Size: $($sizeGB) GB")
+                $infoOutput.Add("   Free Space: $($freeGB) GB ($($percentFree)%)")
+                $infoOutput.Add("")
+            }
+        } else {
+             $infoOutput.Add(" No fixed logical disks found.")
+        }
+        
+        $infoOutput.Add($line)
+        $infoOutput.Add(" Video Card Information")
+        $infoOutput.Add($line)
+
+        # Video Card Info
+        $videoControllers = Get-CimInstance -ClassName Win32_VideoController
+        if ($videoControllers) {
+            foreach ($video in $videoControllers) {
+                $infoOutput.Add(" Name: $($video.Name)")
+                if ($video.AdapterRAM) {
+                    $adapterRamMB = [math]::Round($video.AdapterRAM / 1MB)
+                    $infoOutput.Add("   Adapter RAM: $($adapterRamMB) MB")
+                }
+                $infoOutput.Add("   Driver Version: $($video.DriverVersion)")
+                $infoOutput.Add("")
+            }
+        } else {
+            $infoOutput.Add(" No video controllers found.")
+        }
     }
-    return $allSuccess
+    catch {
+        Write-LogAndHost "Failed to gather some system information. Error: $($_.Exception.Message)" -HostColor Red -LogPrefix "Show-SystemInfo"
+        $infoOutput.Add("ERROR: Could not retrieve all information.")
+    }
+    
+    # Display the collected information
+    Clear-Host
+    foreach($entry in $infoOutput) {
+        Write-Host $entry
+    }
+    
+    Write-LogAndHost "System information displayed." -NoHost
+    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+    $null = Read-Host
 }
 
-# Function to get installed Chocolatey packages
-function Get-InstalledChocolateyPackages {
-    $chocoLibPath = Join-Path -Path $env:ChocolateyInstall -ChildPath "lib"
-    $installedPackages = @()
-    if (Test-Path $chocoLibPath) {
-        try {
-            $installedPackages = Get-ChildItem -Path $chocoLibPath -Directory | Select-Object -ExpandProperty Name
-            Write-LogAndHost "Found installed packages: $($installedPackages -join ', ')" -NoHost
-        } catch {
-            Write-LogAndHost "ERROR: Could not retrieve installed packages from $chocoLibPath. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Failed to get installed packages - "
+# NEW FUNCTION (v1.5): Imports a list of programs from a file and installs them.
+function Import-ProgramSelection {
+    if (-not $script:guiAvailable) {
+        Write-LogAndHost "GUI is not available, cannot launch the Program Import tool." -HostColor Red -LogPrefix "Import-ProgramSelection"
+        Start-Sleep -Seconds 2
+        return
+    }
+
+    Write-LogAndHost "Launching Program Import..." -HostColor Cyan -LogPrefix "Import-ProgramSelection"
+
+    $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+    $openFileDialog.Title = "Select Program List to Import"
+    $openFileDialog.Filter = "JSON Files (*.json)|*.json|All Files (*.*)|*.*"
+    $openFileDialog.InitialDirectory = [Environment]::GetFolderPath("Desktop")
+
+    if ($openFileDialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+        Write-LogAndHost "File import cancelled by user." -HostColor Yellow
+        return
+    }
+    
+    $filePath = $openFileDialog.FileName
+    Write-LogAndHost "User selected file to import: '$filePath'." -NoHost
+    
+    if (-not (Test-Path $filePath)) {
+        Write-LogAndHost "The selected file does not exist: '$filePath'." -HostColor Red
+        Start-Sleep -Seconds 2
+        return
+    }
+
+    $programsToInstall = @()
+    try {
+        # Read the file and convert it from JSON into a PowerShell object.
+        $programsToInstall = Get-Content -Path $filePath -Raw | ConvertFrom-Json -ErrorAction Stop
+        # Basic validation to ensure the JSON is an array.
+        if ($null -eq $programsToInstall -or $programsToInstall.GetType().Name -ne 'Object[]') {
+            throw "File does not contain a valid JSON array of program names."
+        }
+    } catch {
+        Write-LogAndHost "Failed to read or parse the program list file. Make sure it's a valid JSON file containing an array of strings. Error: $($_.Exception.Message)" -HostColor Red -LogPrefix "Import-ProgramSelection"
+        Start-Sleep -Seconds 3
+        return
+    }
+
+    if ($programsToInstall.Count -eq 0) {
+        Write-LogAndHost "The imported file contains no programs to install." -HostColor Yellow
+        Start-Sleep -Seconds 2
+        return
+    }
+    
+    Clear-Host
+    Write-LogAndHost "The following programs will be installed from the file:" -HostColor Cyan
+    $programsToInstall | ForEach-Object { Write-Host " - $_" }
+    Write-Host ""
+    
+    try {
+        Write-LogAndHost "Continue with installation? (Type y/n then press Enter)" -HostColor Yellow
+        $confirmInstall = Read-Host
+    } catch {
+        Write-LogAndHost "Could not read user input. Aborting. $($_.Exception.Message)" -HostColor Red -LogPrefix "Import-ProgramSelection"
+        Start-Sleep -Seconds 2
+        return
+    }
+
+    if ($confirmInstall.Trim().ToLower() -eq 'y') {
+        Clear-Host
+        Write-LogAndHost "Starting installation from imported file..." -NoHost
+        if (Install-Programs -ProgramsToInstall $programsToInstall) {
+            Write-LogAndHost "Installation from file completed." -HostColor Green
+        } else {
+            Write-LogAndHost "Some programs from the imported list may have failed to install. Check the log for details." -HostColor Yellow
         }
     } else {
-        Write-LogAndHost "WARNING: Chocolatey lib directory not found at $chocoLibPath. Cannot list installed packages." -HostColor Yellow
+        Write-LogAndHost "Installation from file cancelled by user." -HostColor Yellow
     }
-    return $installedPackages
+
+    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+    $null = Read-Host
 }
 
-# Function to uninstall programs using Chocolatey
-function Uninstall-Programs {
-    param (
-        [string[]]$ProgramsToUninstall
-    )
+# FUNCTION: Clean temporary system files with a GUI.
+function Invoke-TempFileCleanup {
+    if (-not $script:guiAvailable) {
+        Write-LogAndHost "GUI is not available, cannot launch the System Cleanup tool." -HostColor Red -LogPrefix "Invoke-TempFileCleanup"
+        Start-Sleep -Seconds 2
+        return
+    }
+    Write-LogAndHost "Launching System Cleanup GUI..." -HostColor Cyan
 
-    if ($ProgramsToUninstall.Count -eq 0) {
-        Write-LogAndHost "No programs selected for uninstallation." -HostColor Yellow
-        return $true
+    # --- GUI Setup ---
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "Perdanga System Cleanup"
+    $form.Size = New-Object System.Drawing.Size(600, 550)
+    $form.StartPosition = "CenterScreen"
+    $form.FormBorderStyle = "FixedDialog"
+    $form.MaximizeBox = $false
+    $form.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
+
+    # Common Font and Color scheme for a modern look.
+    $commonFont = New-Object System.Drawing.Font("Segoe UI", 10)
+    $labelColor = [System.Drawing.Color]::White
+    $controlBackColor = [System.Drawing.Color]::FromArgb(60, 60, 63)
+    $controlForeColor = [System.Drawing.Color]::White
+    $groupboxForeColor = [System.Drawing.Color]::Gainsboro
+
+    # Helper functions for creating styled controls to reduce code repetition.
+    function New-StyledCheckBox($Text, $Location, $Checked) {
+        $checkbox = New-Object System.Windows.Forms.CheckBox; $checkbox.Text = $Text; $checkbox.Location = $Location; $checkbox.Font = $commonFont; $checkbox.ForeColor = $labelColor; $checkbox.AutoSize = $true; $checkbox.Checked = $Checked; return $checkbox
+    }
+    function New-StyledGroupBox($Text, $Location, $Size) {
+        $groupbox = New-Object System.Windows.Forms.GroupBox; $groupbox.Text = $Text; $groupbox.Location = $Location; $groupbox.Size = $Size; $groupbox.Font = $commonFont; $groupbox.ForeColor = $groupboxForeColor; return $groupbox
     }
 
-    $allSuccess = $true
-    Write-LogAndHost "Starting uninstallation of $($ProgramsToUninstall.Count) program(s)..." -HostColor Cyan
-    Write-Host ""
+    # --- GroupBox for Cleanup Options ---
+    $groupOptions = New-StyledGroupBox "Select items to clean" "15,15" "560,200"
+    $form.Controls.Add($groupOptions) | Out-Null
+    
+    $yPos = 30
+    $checkWinTemp = New-StyledCheckBox "Windows Temporary Files" "20,$yPos" $true; $groupOptions.Controls.Add($checkWinTemp) | Out-Null; $yPos += 30
+    $checkNvidia = New-StyledCheckBox "NVIDIA Cache Files" "20,$yPos" $true; $groupOptions.Controls.Add($checkNvidia) | Out-Null; $yPos += 30
+    $checkWinUpdate = New-StyledCheckBox "Windows Update Cache" "20,$yPos" $true; $groupOptions.Controls.Add($checkWinUpdate) | Out-Null; $yPos += 30
+    $checkPrefetch = New-StyledCheckBox "Windows Prefetch Files" "20,$yPos" $true; $groupOptions.Controls.Add($checkPrefetch) | Out-Null; $yPos += 30
+    $checkRecycleBin = New-StyledCheckBox "Empty Recycle Bin" "20,$yPos" $true; $groupOptions.Controls.Add($checkRecycleBin) | Out-Null; $yPos += 30
+    
+    # --- GroupBox for Log Output ---
+    $groupLog = New-StyledGroupBox "Log" "15,225" "560,200"
+    $form.Controls.Add($groupLog) | Out-Null
+    
+    $logBox = New-Object System.Windows.Forms.RichTextBox
+    $logBox.Location = "15,25"
+    $logBox.Size = "530,160"
+    $logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
+    $logBox.BackColor = $controlBackColor
+    $logBox.ForeColor = $controlForeColor
+    $logBox.ReadOnly = $true
+    $logBox.BorderStyle = "FixedSingle"
+    $logBox.ScrollBars = "Vertical"
+    $groupLog.Controls.Add($logBox) | Out-Null
 
-    foreach ($program in $ProgramsToUninstall) {
-        Write-LogAndHost "Uninstalling $program..." -LogPrefix "Uninstalling $program..."
-        try {
-            $uninstallOutput = & choco uninstall $program -y --no-progress 2>&1
-            $uninstallOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+    # --- Buttons ---
+    $buttonAnalyze = New-Object System.Windows.Forms.Button; $buttonAnalyze.Text = "Analyze"; $buttonAnalyze.Size = "120,30"; $buttonAnalyze.Location = "100,450"; $buttonAnalyze.Font = $commonFont; $buttonAnalyze.ForeColor = [System.Drawing.Color]::White; $buttonAnalyze.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180); $buttonAnalyze.FlatStyle = "Flat"; $buttonAnalyze.FlatAppearance.BorderSize = 0;
+    $buttonClean = New-Object System.Windows.Forms.Button; $buttonClean.Text = "Clean"; $buttonClean.Size = "120,30"; $buttonClean.Location = "235,450"; $buttonClean.Font = $commonFont; $buttonClean.ForeColor = [System.Drawing.Color]::White; $buttonClean.BackColor = [System.Drawing.Color]::FromArgb(200, 70, 70); $buttonClean.FlatStyle = "Flat"; $buttonClean.FlatAppearance.BorderSize = 0;
+    $buttonClose = New-Object System.Windows.Forms.Button; $buttonClose.Text = "Exit"; $buttonClose.Size = "120,30"; $buttonClose.Location = "370,450"; $buttonClose.Font = $commonFont; $buttonClose.ForeColor = [System.Drawing.Color]::White; $buttonClose.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90); $buttonClose.FlatStyle = "Flat"; $buttonClose.FlatAppearance.BorderSize = 0;
+    
+    $form.Controls.Add($buttonAnalyze) | Out-Null
+    $form.Controls.Add($buttonClean) | Out-Null
+    $form.Controls.Add($buttonClose) | Out-Null
 
-            if ($LASTEXITCODE -eq 0) {
-                Write-LogAndHost "$program uninstalled successfully." -HostColor White
-            } else {
-                $allSuccess = $false
-                Write-LogAndHost "ERROR: Failed to uninstall $program. Exit code: $LASTEXITCODE. Details: $($uninstallOutput | Out-String)" -HostColor Red -LogPrefix "Error uninstalling $program. "
+    $buttonClose.add_Click({$form.Close()}) | Out-Null
+
+    # --- Logic ---
+    $totalSize = 0
+    $pathsToClean = @{}
+
+    # Helper scriptblock to add text to the log box with color.
+    $logWriter = {
+        param($Message, $Color = 'White')
+        $logBox.SelectionStart = $logBox.TextLength
+        $logBox.SelectionLength = 0
+        $logBox.SelectionColor = $Color
+        $logBox.AppendText("$(Get-Date -Format 'HH:mm:ss') - $Message`n")
+        $logBox.ScrollToCaret()
+    }
+    
+    # Analyze button logic: calculates the size of deletable files.
+    $buttonAnalyze.add_Click({
+        $logBox.Clear()
+        & $logWriter "Starting analysis..." 'Cyan'
+        $totalSize = 0
+        $pathsToClean.Clear()
+
+        $calculateSize = {
+            param($path)
+            $size = 0
+            try {
+                if (Test-Path $path -ErrorAction Stop) {
+                    $items = Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue
+                    $size = ($items | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                }
+            } catch {
+                & $logWriter "Could not access path: $path. Error: $($_.Exception.Message)" 'Yellow'
             }
-        } catch {
-            $allSuccess = $false
-            Write-LogAndHost "ERROR: Exception occurred while uninstalling $program. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during uninstallation of $program - "
+            return $size
         }
-        Write-Host ""
+
+        if ($checkWinTemp.Checked) {
+            $paths = @("$env:TEMP", "$env:windir\Temp")
+            $pathsToClean['Windows Temp'] = $paths
+            foreach($p in $paths) { $totalSize += & $calculateSize $p }
+        }
+        if ($checkNvidia.Checked) {
+            $paths = @("$env:LOCALAPPDATA\NVIDIA\GLCache", "$env:ProgramData\NVIDIA Corporation\Downloader")
+            $pathsToClean['NVIDIA Cache'] = $paths
+            foreach($p in $paths) { $totalSize += & $calculateSize $p }
+        }
+        if ($checkWinUpdate.Checked) {
+            $paths = @("$env:windir\SoftwareDistribution\Download")
+            $pathsToClean['Windows Update Cache'] = $paths
+            foreach($p in $paths) { $totalSize += & $calculateSize $p }
+        }
+        if ($checkPrefetch.Checked) {
+            $paths = @("$env:windir\Prefetch")
+            $pathsToClean['Prefetch'] = $paths
+            $totalSize += & $calculateSize $paths[0]
+        }
+        if ($checkRecycleBin.Checked) {
+            try {
+                # Use the Shell.Application COM object to query the Recycle Bin size.
+                $shell = New-Object -ComObject Shell.Application
+                $recycleBin = $shell.NameSpace(0xA)
+                $items = $recycleBin.Items()
+                $size = ($items | ForEach-Object { $_.Size } | Measure-Object -Sum).Sum
+                if ($size -gt 0) {
+                    $pathsToClean['Recycle Bin'] = $recycleBin # Store the object itself for later.
+                    $totalSize += $size
+                }
+            } catch {
+                & $logWriter "Could not access Recycle Bin. Error: $($_.Exception.Message)" 'Yellow'
+            }
+        }
+        
+        $sizeInMB = [math]::Round($totalSize / 1MB, 2)
+        & $logWriter "Analysis complete. Found $sizeInMB MB of files to clean." 'Green'
+        & $logWriter "Press 'Clean' to remove these files." 'Cyan'
+    })
+
+    # Clean button logic: performs the actual deletion after confirmation.
+    $buttonClean.add_Click({
+        if ($pathsToClean.Count -eq 0) {
+            [System.Windows.Forms.MessageBox]::Show("Please run an analysis first by clicking the 'Analyze' button.", "Analysis Required", "OK", "Information") | Out-Null
+            return
+        }
+        
+        $confirmResult = [System.Windows.Forms.MessageBox]::Show("Are you sure you want to permanently delete these files? This cannot be undone.", "Confirm Deletion", "YesNo", "Warning")
+        if ($confirmResult -ne 'Yes') {
+            & $logWriter "Cleanup cancelled by user." 'Yellow'
+            return
+        }
+
+        & $logWriter "Starting cleanup..." 'Cyan'
+        $buttonClean.Enabled = $false
+        $buttonAnalyze.Enabled = $false
+        $form.Update()
+
+        $totalDeleted = 0
+        foreach($category in $pathsToClean.Keys) {
+            & $logWriter "Cleaning $category..." 'White'
+            $paths = $pathsToClean[$category]
+            
+            if ($category -eq 'Recycle Bin') {
+                try {
+                    $recycleBinObject = $pathsToClean[$category]
+                    $sizeToDelete = ($recycleBinObject.Items() | ForEach-Object { $_.Size } | Measure-Object -Sum).Sum
+                    $totalDeleted += $sizeToDelete
+                    # Use the built-in cmdlet to empty the recycle bin.
+                    Clear-RecycleBin -Force -ErrorAction Stop
+                    & $logWriter "Recycle Bin emptied successfully." 'Green'
+                } catch {
+                    & $logWriter "Failed to empty Recycle Bin. Error: $($_.Exception.Message)" 'Red'
+                }
+            } else {
+                foreach($path in $paths) {
+                    try {
+                        $items = Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue
+                        $size = ($items | Measure-Object -Property Length -Sum).Sum
+                        $totalDeleted += $size
+                        Remove-Item -Path "$path\*" -Recurse -Force -ErrorAction SilentlyContinue
+                        & $logWriter "Cleaned path: $path" 'Green'
+                    } catch {
+                        & $logWriter "Failed to clean path: $path. Error: $($_.Exception.Message)" 'Red'
+                    }
+                }
+            }
+        }
+        
+        $deletedInMB = [math]::Round($totalDeleted / 1MB, 2)
+        & $logWriter "Cleanup complete. Freed approximately $deletedInMB MB of space." 'Green'
+        $pathsToClean.Clear()
+        $buttonClean.Enabled = $true
+        $buttonAnalyze.Enabled = $true
+    })
+
+    # Show the form and dispose of it when closed.
+    try {
+        $null = $form.ShowDialog()
     }
-    return $allSuccess
+    catch {
+        Write-LogAndHost "An unexpected error occurred with the System Cleanup GUI. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-TempFileCleanup"
+    }
+    finally {
+        $form.Dispose()
+    }
+    
+    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+    $null = Read-Host
 }
 
-# ENHANCED FUNCTION: Create a detailed autounattend.xml file via GUI with regional settings and tooltips
+# ENHANCED FUNCTION: Create a detailed autounattend.xml file via GUI with regional settings and tooltips.
 function Create-UnattendXml {
     if (-not $script:guiAvailable) {
-        Write-LogAndHost "ERROR: GUI is not available, cannot launch the Unattend XML Creator." -HostColor Red
+        Write-LogAndHost "GUI is not available, cannot launch the Unattend XML Creator." -HostColor Red -LogPrefix "Create-UnattendXml"
         Start-Sleep -Seconds 2
         return
     }
@@ -428,8 +752,8 @@ function Create-UnattendXml {
 
     # --- ToolTip Setup (for descriptions) ---
     $toolTip = New-Object System.Windows.Forms.ToolTip
-    $toolTip.AutoPopDelay = 10000 # Keep tooltip visible for 10 seconds
-    $toolTip.InitialDelay = 500   # Show after 0.5 seconds
+    $toolTip.AutoPopDelay = 10000 # Keep tooltip visible for 10 seconds.
+    $toolTip.InitialDelay = 500   # Show after 0.5 seconds.
     $toolTip.ReshowDelay = 500
 
     # --- Button Panel ---
@@ -446,14 +770,14 @@ function Create-UnattendXml {
     $form.Controls.Add($tabControl) | Out-Null
     $tabControl.BringToFront()
 
-    # Common Font and Color
+    # Common Font and Color scheme.
     $commonFont = New-Object System.Drawing.Font("Segoe UI", 10)
     $labelColor = [System.Drawing.Color]::White
     $controlBackColor = [System.Drawing.Color]::FromArgb(60, 60, 63)
     $controlForeColor = [System.Drawing.Color]::White
     $groupboxForeColor = [System.Drawing.Color]::Gainsboro
 
-    # Helper functions for creating styled controls
+    # Helper functions for creating styled controls.
     function New-StyledLabel($Text, $Location) {
         $label = New-Object System.Windows.Forms.Label; $label.Text = $Text; $label.Location = $Location; $label.Font = $commonFont; $label.ForeColor = $labelColor; $label.AutoSize = $true; return $label
     }
@@ -476,23 +800,20 @@ function Create-UnattendXml {
     $tabGeneral.Controls.Add((New-StyledLabel -Text "Computer Name:" -Location "20,$yPos")) | Out-Null; $textComputerName = New-StyledTextBox -Location "180,$yPos" -Size "280,20"; $textComputerName.Text = "DESKTOP-PC"; $tabGeneral.Controls.Add($textComputerName) | Out-Null; $yPos += 40
     $tabGeneral.Controls.Add((New-StyledLabel -Text "Admin User Name:" -Location "20,$yPos")) | Out-Null; $textUserName = New-StyledTextBox -Location "180,$yPos" -Size "280,20"; $textUserName.Text = "Admin"; $tabGeneral.Controls.Add($textUserName) | Out-Null; $yPos += 40
     
-    # --- ENHANCEMENT: Add password length limit and character counter ---
     $tabGeneral.Controls.Add((New-StyledLabel -Text "Password:" -Location "20,$yPos")) | Out-Null
     $textPassword = New-StyledTextBox -Location "180,$yPos" -Size "280,20"
     $textPassword.UseSystemPasswordChar = $true
-    $textPassword.MaxLength = 127 # Enforce Windows unattend spec 127-char limit
+    $textPassword.MaxLength = 127
     $tabGeneral.Controls.Add($textPassword) | Out-Null
-    # Add a character counter label for user feedback
     $labelPasswordCounter = New-StyledLabel -Text "0/127" -Location "470,$yPos"
     $tabGeneral.Controls.Add($labelPasswordCounter) | Out-Null
-    # Add event handler to update the counter in real-time
     $textPassword.Add_TextChanged({
         $length = $textPassword.Text.Length
         $labelPasswordCounter.Text = "$length/127"
         if ($length -eq 127) {
             $labelPasswordCounter.ForeColor = [System.Drawing.Color]::Crimson
         } else {
-            $labelPasswordCounter.ForeColor = $labelColor # Revert to default color
+            $labelPasswordCounter.ForeColor = $labelColor
         }
     })
     $yPos += 40
@@ -501,7 +822,6 @@ function Create-UnattendXml {
     $tabRegional = New-Object System.Windows.Forms.TabPage; $tabRegional.Text = "Regional"; $tabRegional.BackColor = $form.BackColor; $tabRegional.Padding = New-Object System.Windows.Forms.Padding(10)
     $tabControl.Controls.Add($tabRegional) | Out-Null
 
-    # GroupBox for Language and Locale
     $groupLocale = New-StyledGroupBox "Language & Locale" "15,15" "750,150"
     $tabRegional.Controls.Add($groupLocale) | Out-Null
     $yPos = 30
@@ -516,14 +836,13 @@ function Create-UnattendXml {
     $groupLocale.Controls.Add((New-StyledLabel -Text "User Locale:" -Location "15,$yPos")) | Out-Null; $comboUserLocale = New-StyledComboBox -Location "150,$yPos" -Size "250,20"; $comboUserLocale.Items.AddRange($commonLocales) | Out-Null; $comboUserLocale.Text = (Get-Culture).Name; $groupLocale.Controls.Add($comboUserLocale) | Out-Null
     $groupLocale.Controls.Add((New-StyledLabel -Text "(e.g., en-US, tr-TR)" -Location "410,$yPos")) | Out-Null
 
-    # GroupBox for Time Zone
     $groupTimeZone = New-StyledGroupBox "Time Zone" "15,180" "750,220"
     $tabRegional.Controls.Add($groupTimeZone) | Out-Null
     $yPos = 30
     $groupTimeZone.Controls.Add((New-StyledLabel -Text "Search:" -Location "15,$yPos")) | Out-Null; $textTimeZoneSearch = New-StyledTextBox -Location "85,$yPos" -Size "645,20"; $groupTimeZone.Controls.Add($textTimeZoneSearch) | Out-Null; $yPos += 35
     $listTimeZone = New-Object System.Windows.Forms.ListBox; $listTimeZone.Location = "15,$yPos"; $listTimeZone.Size = "715,100"; $listTimeZone.Font = $commonFont; $listTimeZone.BackColor = $controlBackColor; $listTimeZone.ForeColor = $controlForeColor
     
-    # --- ENHANCEMENT: Use a static list of Windows 11 Time Zone IDs ---
+    # A static list of modern Windows Time Zone IDs for reliability.
     $windows11TimeZoneIds = @(
         "Dateline Standard Time", "UTC-11", "Aleutian Standard Time", "Hawaiian Standard Time", 
         "Marquesas Standard Time", "Alaskan Standard Time", "UTC-09", "Pacific Standard Time (Mexico)", 
@@ -565,7 +884,7 @@ function Create-UnattendXml {
     $allTimeZonesInfo = try { 
         $windows11TimeZoneIds | ForEach-Object { [System.TimeZoneInfo]::FindSystemTimeZoneById($_) }
     } catch { 
-        Write-LogAndHost "WARNING: Could not find all static time zones. The list may be incomplete. Falling back to system's available time zones." -HostColor Yellow
+        Write-LogAndHost "Could not find all static time zones. The list may be incomplete. Falling back to system's available time zones." -HostColor Yellow -LogPrefix "Create-UnattendXml"
         [System.TimeZoneInfo]::GetSystemTimeZones() 
     }
     
@@ -577,10 +896,11 @@ function Create-UnattendXml {
         $timeZoneMap[$displayString] = $tz.Id
         $displayString
     }
-    $sortedFormattedTimeZones = $formattedTimeZones | Sort-Object
+    $sortedFormattedTimeZones = $formattedTimezones | Sort-Object
     
     if ($null -ne $sortedFormattedTimeZones) { $listTimeZone.Items.AddRange($sortedFormattedTimeZones) | Out-Null }
     
+    # Pre-select the user's current time zone.
     try {
         $currentTimeZoneId = (Get-TimeZone).Id
         $currentFormattedTz = $timeZoneMap.GetEnumerator() | Where-Object { $_.Value -eq $currentTimeZoneId } | Select-Object -First 1 -ExpandProperty Key
@@ -608,12 +928,12 @@ function Create-UnattendXml {
     }) | Out-Null
     if ($listTimeZone.SelectedItem) { $labelSelectedTimeZone.Text = $listTimeZone.SelectedItem }
 
-    # --- ENHANCEMENT: Adjusted GroupBox title and height for new constraints ---
     $groupKeyboard = New-StyledGroupBox "Keyboard Layouts (select up to 5)" "15,415" "750,245"
     $tabRegional.Controls.Add($groupKeyboard) | Out-Null
     $yPos = 30
     $groupKeyboard.Controls.Add((New-StyledLabel -Text "Search:" -Location "15,$yPos")) | Out-Null; $textKeyboardSearch = New-StyledTextBox -Location "85,$yPos" -Size "645,20"; $groupKeyboard.Controls.Add($textKeyboardSearch) | Out-Null; $yPos += 35
     $listKeyboardLayouts = New-Object System.Windows.Forms.CheckedListBox; $listKeyboardLayouts.Location = "15,$yPos"; $listKeyboardLayouts.Size = "715,110"; $listKeyboardLayouts.Font = $commonFont; $listKeyboardLayouts.BackColor = $controlBackColor; $listKeyboardLayouts.ForeColor = $controlForeColor; $listKeyboardLayouts.CheckOnClick = $true
+    # A map of friendly names to the required unattend.xml format for keyboard layouts.
     $keyboardLayoutData = @{
         "Arabic (101)"="0401:00000401"; "Bulgarian"="0402:00000402"; "Chinese (Traditional) - US Keyboard"="0404:00000404"; "Czech"="0405:00000405"; "Danish"="0406:00000406"; "German"="0407:00000407";
         "Greek"="0408:00000408"; "English (United States)"="0409:00000409"; "Spanish"="040a:0000040a"; "Finnish"="040b:0000040b"; "French"="040c:0000040c"; "Hebrew"="040d:0000040d";
@@ -628,24 +948,20 @@ function Create-UnattendXml {
     $listKeyboardLayouts.Items.AddRange($sortedKeyboardLayouts.Name) | Out-Null
     $groupKeyboard.Controls.Add($listKeyboardLayouts) | Out-Null; $yPos += $listKeyboardLayouts.Height + 10
 
-    # Label to show current Keyboard Layout selection(s)
     $groupKeyboard.Controls.Add((New-StyledLabel -Text "Current Selection:" -Location "15,$yPos")) | Out-Null
-    # Increased label height to allow text wrapping for multiple selections
     $labelSelectedKeyboards = New-StyledLabel -Text "None" -Location "150,$yPos"; $labelSelectedKeyboards.ForeColor = [System.Drawing.Color]::LightSteelBlue; $labelSelectedKeyboards.AutoSize = $false; $labelSelectedKeyboards.Size = '580,50'
     $groupKeyboard.Controls.Add($labelSelectedKeyboards) | Out-Null
 
-    # Script block to update the keyboard label based on the persistent list
     $updateKeyboardLabel = {
         $checkedItemsText = ($checkedKeyboardLayoutNames | Sort-Object) -join ', '
         if ([string]::IsNullOrWhiteSpace($checkedItemsText)) { $labelSelectedKeyboards.Text = "None" } else { $labelSelectedKeyboards.Text = $checkedItemsText }
     }
 
-    # Event Handlers for Keyboard list
+    # Enforce a maximum of 5 keyboard layouts.
     $listKeyboardLayouts.Add_ItemCheck({
         param($sender, $e)
         $itemName = $sender.Items[$e.Index]
         if ($e.NewValue -eq [System.Windows.Forms.CheckState]::Checked) {
-            # --- ENHANCEMENT: Limit selection to 5 keyboard layouts ---
             if ($checkedKeyboardLayoutNames.Count -ge 5) {
                 $e.NewValue = [System.Windows.Forms.CheckState]::Unchecked
                 [System.Windows.Forms.MessageBox]::Show("You can select a maximum of 5 keyboard layouts.", "Selection Limit Reached", "OK", "Information") | Out-Null
@@ -665,6 +981,7 @@ function Create-UnattendXml {
         $filteredLayouts = $sortedKeyboardLayouts | Where-Object { $_.Name -match [regex]::Escape($searchText) }
         if ($null -ne $filteredLayouts) { $listKeyboardLayouts.Items.AddRange($filteredLayouts.Name) | Out-Null }
         
+        # Re-check the items that were previously selected.
         for($i = 0; $i -lt $listKeyboardLayouts.Items.Count; $i++) {
             if ($checkedKeyboardLayoutNames.Contains($listKeyboardLayouts.Items[$i])) {
                 $listKeyboardLayouts.SetItemChecked($i, $true)
@@ -673,6 +990,7 @@ function Create-UnattendXml {
         $listKeyboardLayouts.EndUpdate()
     }) | Out-Null
     
+    # Pre-select the user's current keyboard layout.
     try { 
         $currentLayoutId = (Get-WinUserLanguageList)[0].InputMethodTips[0]
         $defaultKeyboardName = ($keyboardLayoutData.GetEnumerator() | Where-Object { $_.Value -eq $currentLayoutId }).Name
@@ -683,11 +1001,10 @@ function Create-UnattendXml {
         }
     } catch {}; & $updateKeyboardLabel
 
-    # --- Tab 3: Automation & Tweaks (COMBINED TAB) ---
+    # --- Tab 3: Automation & Tweaks ---
     $tabAutomation = New-Object System.Windows.Forms.TabPage; $tabAutomation.Text = "Automation & Tweaks"; $tabAutomation.BackColor = $form.BackColor; $tabAutomation.Padding = New-Object System.Windows.Forms.Padding(10)
     $tabControl.Controls.Add($tabAutomation) | Out-Null
 
-    # GroupBox for OOBE Automation
     $groupOobe = New-StyledGroupBox "OOBE Skip Options" "15,15" "750,220"
     $tabAutomation.Controls.Add($groupOobe) | Out-Null
     $yPos = 30
@@ -703,7 +1020,6 @@ function Create-UnattendXml {
     $checkHideWireless = New-StyledCheckBox -Text "Hide Wireless Setup" -Location "20,$yPos" -Checked $true; $groupOobe.Controls.Add($checkHideWireless) | Out-Null
     $toolTip.SetToolTip($checkHideWireless, "Skips the network and Wi-Fi connection screen during the Out-of-Box Experience (OOBE).")
 
-    # GroupBox for Customization/System Tweaks
     $groupCustom = New-StyledGroupBox "First Logon System Tweaks" "15,250" "750,220"
     $tabAutomation.Controls.Add($groupCustom) | Out-Null
     $yPos = 30
@@ -719,13 +1035,11 @@ function Create-UnattendXml {
     $checkDisableSuggestions = New-StyledCheckBox -Text "Disable App Suggestions" -Location "20,$yPos" -Checked $true; $groupCustom.Controls.Add($checkDisableSuggestions) | Out-Null
     $toolTip.SetToolTip($checkDisableSuggestions, "Prevents Windows from displaying app and content suggestions in the Start Menu and on the lock screen.")
 
-    # --- NEW: Add instructional caption at the bottom of the tab ---
     $automationInfoLabel = New-Object System.Windows.Forms.Label
-    $automationInfoLabel.Text = "Hover over an option for a detailed description ."
+    $automationInfoLabel.Text = "Hover over an option for a detailed description."
     $automationInfoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8)
     $automationInfoLabel.ForeColor = [System.Drawing.Color]::Gray
     $automationInfoLabel.AutoSize = $true
-    # Position it below the group boxes. The second groupbox ends at y = 250 + 220 = 470.
     $automationInfoLabel.Location = New-Object System.Drawing.Point(20, 485)
     $tabAutomation.Controls.Add($automationInfoLabel) | Out-Null
 
@@ -735,6 +1049,7 @@ function Create-UnattendXml {
     $bloatTablePanel = New-Object System.Windows.Forms.TableLayoutPanel; $bloatTablePanel.Dock = "Fill"; $bloatTablePanel.AutoScroll = $true; $bloatTablePanel.BackColor = $form.BackColor; $tabBloatware.Controls.Add($bloatTablePanel) | Out-Null; $bloatTablePanel.BringToFront()
     $bloatBottomPanel = New-Object System.Windows.Forms.Panel; $bloatBottomPanel.Dock = "Bottom"; $bloatBottomPanel.Height = 40; $bloatBottomPanel.BackColor = $form.BackColor; $tabBloatware.Controls.Add($bloatBottomPanel) | Out-Null
     $bloatwareCheckboxes = @()
+    # A comprehensive list of removable apps and features.
     $bloatwareList = @(
         '3D Viewer', 'Bing Search', 'Calculator', 'Camera', 'Clipchamp', 'Clock', 'Copilot', 'Cortana', 'Dev Home',
         'Family', 'Feedback Hub', 'Get Help', 'Handwriting (all languages)', 'Internet Explorer', 'Mail and Calendar',
@@ -746,6 +1061,7 @@ function Create-UnattendXml {
         'Windows Fax and Scan', 'Windows Hello', 'Windows Media Player (classic)', 'Windows Media Player (modern)',
         'Windows Terminal', 'WordPad', 'Xbox Apps', 'Your Phone / Phone Link'
     ) | Sort-Object
+    # Use a TableLayoutPanel for a clean, multi-column layout.
     $bloatTablePanel.ColumnCount = 3; $rowsNeeded = [math]::Ceiling($bloatwareList.Count / $bloatTablePanel.ColumnCount); $bloatTablePanel.RowCount = $rowsNeeded
     for ($i = 0; $i -lt $bloatTablePanel.ColumnCount; $i++) { $bloatTablePanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33.33))) | Out-Null }
     for ($i = 0; $i -lt $bloatTablePanel.RowCount; $i++) { $bloatTablePanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null }
@@ -767,12 +1083,12 @@ function Create-UnattendXml {
     $buttonCancel = New-Object System.Windows.Forms.Button; $buttonCancel.Text = "Cancel"; $buttonCancel.Size = "120,30"; $buttonCancel.Location = "395,10"; $buttonCancel.Font = $commonFont; $buttonCancel.ForeColor = [System.Drawing.Color]::White; $buttonCancel.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90); $buttonCancel.FlatStyle = "Flat"; $buttonCancel.FlatAppearance.BorderSize = 0;
     $buttonCancel.add_Click({$form.Close()}) | Out-Null; $buttonPanel.Controls.Add($buttonCancel) | Out-Null
 
-    # Show the form and check the result
+    # Show the form and check the result.
     try {
         $result = $form.ShowDialog()
     }
     catch {
-        Write-LogAndHost "ERROR: An unexpected error occurred with the Unattend XML Creator GUI. Details: $($_.Exception.Message)" -HostColor Red
+        Write-LogAndHost "An unexpected error occurred with the Unattend XML Creator GUI. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Create-UnattendXml"
         $result = [System.Windows.Forms.DialogResult]::Cancel
     }
     finally {
@@ -783,7 +1099,7 @@ function Create-UnattendXml {
         Write-LogAndHost "XML creation cancelled by user." -HostColor Yellow; Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host; return
     }
 
-    # Collect data from form
+    # Collect data from the form controls.
     $selectedKeyboardLayouts = $checkedKeyboardLayoutNames | ForEach-Object { $keyboardLayoutData[$_] }
     $selectedTimeZoneId = if ($listTimeZone.SelectedItem) { $timeZoneMap[$listTimeZone.SelectedItem] } else { $null }
 
@@ -803,7 +1119,7 @@ function Create-UnattendXml {
         [string]::IsNullOrWhiteSpace($formData.UserLocale) -or [string]::IsNullOrWhiteSpace($formData.TimeZone) -or `
         $selectedKeyboardLayouts.Count -eq 0) {
         [System.Windows.Forms.MessageBox]::Show("Please fill in all general and regional settings, including at least one keyboard layout.", "Validation Failed", "OK", "Error") | Out-Null
-        Write-LogAndHost "XML creation aborted due to missing required fields." -HostColor Red
+        Write-LogAndHost "XML creation aborted due to missing required fields." -HostColor Red -LogPrefix "Create-UnattendXml"
         Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host; return
     }
 
@@ -811,12 +1127,13 @@ function Create-UnattendXml {
     $filePath = Join-Path -Path $desktopPath -ChildPath "autounattend.xml"
     Write-LogAndHost "Creating XML structure based on GUI selections..." -NoHost
         
-    # Create XML Document
+    # --- XML Generation ---
     $xml = New-Object System.Xml.XmlDocument
     $xml.AppendChild($xml.CreateXmlDeclaration("1.0", "utf-8", $null)) | Out-Null
     $root = $xml.CreateElement("unattend"); $root.SetAttribute("xmlns", "urn:schemas-microsoft-com:unattend"); $xml.AppendChild($root) | Out-Null
     $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable); $ns.AddNamespace("d6p1", "http://schemas.microsoft.com/WMIConfig/2002/State")
     
+    # Helper function to create XML components correctly.
     function New-Component($ParentNode, $Name, $Pass, $Token="31bf3856ad364e35", $Arch="amd64") {
         $settings = $ParentNode.SelectSingleNode("//unattend/settings[@pass='$Pass']")
         if (-not $settings) { $settings = $ParentNode.OwnerDocument.CreateElement("settings"); $settings.SetAttribute("pass", $Pass); $ParentNode.AppendChild($settings) | Out-Null }
@@ -829,7 +1146,7 @@ function Create-UnattendXml {
     }
     
     # --- Build XML from formData ---
-    # Pass: specialize
+    # Pass 4: specialize
     $compIntlSpec = New-Component -ParentNode $root -Name "Microsoft-Windows-International-Core" -Pass "specialize"
     $compIntlSpec.AppendChild($xml.CreateElement("InputLocale")).InnerText = $formData.KeyboardLayouts
     $compIntlSpec.AppendChild($xml.CreateElement("SystemLocale")).InnerText = $formData.SystemLocale
@@ -840,7 +1157,7 @@ function Create-UnattendXml {
     $compShellSpec.AppendChild($xml.CreateElement("ComputerName")).InnerText = $formData.ComputerName
     $compShellSpec.AppendChild($xml.CreateElement("TimeZone")).InnerText = $formData.TimeZone
     
-    # Pass: oobeSystem
+    # Pass 7: oobeSystem
     $compIntlOobe = New-Component -ParentNode $root -Name "Microsoft-Windows-International-Core" -Pass "oobeSystem"
     $compIntlOobe.AppendChild($xml.CreateElement("InputLocale")).InnerText = $formData.KeyboardLayouts
     $compIntlOobe.AppendChild($xml.CreateElement("SystemLocale")).InnerText = $formData.SystemLocale
@@ -861,7 +1178,7 @@ function Create-UnattendXml {
     $localAccount.AppendChild($xml.CreateElement("Group")).InnerText = "Administrators"; $localAccount.AppendChild($xml.CreateElement("DisplayName")).InnerText = $formData.UserName
     $passwordNode = $localAccount.AppendChild($xml.CreateElement("Password")); $passwordNode.AppendChild($xml.CreateElement("Value")).InnerText = $formData.Password; $passwordNode.AppendChild($xml.CreateElement("PlainText")).InnerText = "true"
     
-    # FirstLogonCommands are executed after user logon
+    # FirstLogonCommands are executed after the user logs on for the first time.
     $firstLogonCommands = $compShellOobe.AppendChild($xml.CreateElement("FirstLogonCommands"))
     $commandIndex = 1
     
@@ -870,13 +1187,15 @@ function Create-UnattendXml {
     if ($formData.DisableSysRestore) { $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'powershell.exe -Command "Disable-ComputerRestore -Drive C:\"' }
     if ($formData.DisableSuggestions) { $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'cmd /c reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v SubscribedContent-338389Enabled /t REG_DWORD /d 0 /f' }
 
+    # A map of friendly bloatware names to their removal commands.
     $bloatwareCommands = @{
         '3D Viewer' = 'Get-AppxPackage *Microsoft.Microsoft3DViewer* | Remove-AppxPackage -AllUsers'; 'Bing Search' = 'reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v BingSearchEnabled /t REG_DWORD /d 0 /f'; 'Calculator' = 'Get-AppxPackage *Microsoft.WindowsCalculator* | Remove-AppxPackage -AllUsers'; 'Camera' = 'Get-AppxPackage *Microsoft.WindowsCamera* | Remove-AppxPackage -AllUsers'; 'Clipchamp' = 'Get-AppxPackage *Microsoft.Clipchamp* | Remove-AppxPackage -AllUsers'; 'Clock' = 'Get-AppxPackage *Microsoft.WindowsAlarms* | Remove-AppxPackage -AllUsers'; 'Copilot' = 'reg add "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f'; 'Cortana' = 'Get-AppxPackage *Microsoft.549981C3F5F10* | Remove-AppxPackage -AllUsers'; 'Dev Home' = 'Get-AppxPackage *Microsoft.DevHome* | Remove-AppxPackage -AllUsers'; 'Family' = 'Get-AppxPackage *Microsoft.Windows.Family* | Remove-AppxPackage -AllUsers'; 'Feedback Hub' = 'Get-AppxPackage *Microsoft.WindowsFeedbackHub* | Remove-AppxPackage -AllUsers'; 'Get Help' = 'Get-AppxPackage *Microsoft.GetHelp* | Remove-AppxPackage -AllUsers'; 'Handwriting (all languages)' = 'Get-WindowsCapability -Online | Where-Object { $_.Name -like "Language.Handwriting*" } | ForEach-Object { Remove-WindowsCapability -Online -Name $_.Name -NoRestart }'; 'Internet Explorer' = 'Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -NoRestart'; 'Mail and Calendar' = 'Get-AppxPackage *microsoft.windowscommunicationsapps* | Remove-AppxPackage -AllUsers'; 'Maps' = 'Get-AppxPackage *Microsoft.WindowsMaps* | Remove-AppxPackage -AllUsers'; 'Math Input Panel' = 'Remove-WindowsCapability -Online -Name "MathRecognizer~~~~0.0.1.0" -NoRestart'; 'Media Features' = 'Disable-WindowsOptionalFeature -Online -FeatureName "MediaPlayback" -NoRestart'; 'Mixed Reality' = 'Get-AppxPackage *Microsoft.MixedReality.Portal* | Remove-AppxPackage -AllUsers'; 'Movies & TV' = 'Get-AppxPackage *Microsoft.ZuneVideo* | Remove-AppxPackage -AllUsers'; 'News' = 'Get-AppxPackage *Microsoft.BingNews* | Remove-AppxPackage -AllUsers'; 'Notepad (modern)' = 'Get-AppxPackage *Microsoft.WindowsNotepad* | Remove-AppxPackage -AllUsers'; 'Office 365' = 'Get-AppxPackage *Microsoft.MicrosoftOfficeHub* | Remove-AppxPackage -AllUsers'; 'OneDrive' = '$process = Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -PassThru -Wait; if ($process.ExitCode -ne 0) { Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -PassThru -Wait }'; 'OneNote' = 'Get-AppxPackage *Microsoft.Office.OneNote* | Remove-AppxPackage -AllUsers'; 'OneSync' = '# Handled by Mail and Calendar'; 'OpenSSH Client' = 'Remove-WindowsCapability -Online -Name "OpenSSH.Client~~~~0.0.1.0" -NoRestart'; 'Outlook for Windows' = 'Get-AppxPackage *Microsoft.OutlookForWindows* | Remove-AppxPackage -AllUsers'; 'Paint' = 'Get-AppxPackage *Microsoft.Paint* | Remove-AppxPackage -AllUsers'; 'Paint 3D' = 'Get-AppxPackage *Microsoft.MSPaint* | Remove-AppxPackage -AllUsers'; 'People' = 'Get-AppxPackage *Microsoft.People* | Remove-AppxPackage -AllUsers'; 'Photos' = 'Get-AppxPackage *Microsoft.Windows.Photos* | Remove-AppxPackage -AllUsers'; 'Power Automate' = 'Get-AppxPackage *Microsoft.PowerAutomateDesktop* | Remove-AppxPackage -AllUsers'; 'PowerShell 2.0' = 'Disable-WindowsOptionalFeature -Online -FeatureName "MicrosoftWindowsPowerShellV2" -NoRestart'; 'PowerShell ISE' = 'Remove-WindowsCapability -Online -Name "PowerShell-ISE-v2~~~~0.0.1.0" -NoRestart'; 'Quick Assist' = 'Get-AppxPackage *Microsoft.QuickAssist* | Remove-AppxPackage -AllUsers'; 'Recall' = 'reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" /v DisableAllScreenshotCapture /t REG_DWORD /d 1 /f'; 'Remote Desktop Client' = '# Core component, removal not recommended.'; 'Skype' = 'Get-AppxPackage *Microsoft.SkypeApp* | Remove-AppxPackage -AllUsers'; 'Snipping Tool' = 'Get-AppxPackage *Microsoft.ScreenSketch* | Remove-AppxPackage -AllUsers'; 'Solitaire Collection' = 'Get-AppxPackage *Microsoft.MicrosoftSolitaireCollection* | Remove-AppxPackage -AllUsers'; 'Speech (all languages)' = 'Get-WindowsCapability -Online | Where-Object { $_.Name -like "Language.Speech*" } | ForEach-Object { Remove-WindowsCapability -Online -Name $_.Name -NoRestart }'; 'Steps Recorder' = 'Disable-WindowsOptionalFeature -Online -FeatureName "StepsRecorder" -NoRestart'; 'Sticky Notes' = 'Get-AppxPackage *Microsoft.MicrosoftStickyNotes* | Remove-AppxPackage -AllUsers'; 'Teams' = 'Get-AppxPackage *MicrosoftTeams* | Remove-AppxPackage -AllUsers'; 'Tips' = 'Get-AppxPackage *Microsoft.Getstarted* | Remove-AppxPackage -AllUsers'; 'To Do' = 'Get-AppxPackage *Microsoft.Todos* | Remove-AppxPackage -AllUsers'; 'Voice Recorder' = 'Get-AppxPackage *Microsoft.WindowsSoundRecorder* | Remove-AppxPackage -AllUsers'; 'Wallet' = 'Get-AppxPackage *Microsoft.Wallet* | Remove-AppxPackage -AllUsers'; 'Weather' = 'Get-AppxPackage *Microsoft.BingWeather* | Remove-AppxPackage -AllUsers'; 'Windows Fax and Scan' = 'Disable-WindowsOptionalFeature -Online -FeatureName "Windows-Fax-And-Scan" -NoRestart'; 'Windows Hello' = 'reg add "HKLM\SOFTWARE\Policies\Microsoft\Biometrics" /v Enabled /t REG_DWORD /d 0 /f; reg add "HKLM\SOFTWARE\Policies\Microsoft\Biometrics\CredentialProviders" /v Enabled /t REG_DWORD /d 0 /f'; 'Windows Media Player (classic)' = 'Disable-WindowsOptionalFeature -Online -FeatureName "WindowsMediaPlayer" -NoRestart'; 'Windows Media Player (modern)' = 'Get-AppxPackage *Microsoft.ZuneMusic* | Remove-AppxPackage -AllUsers'; 'Windows Terminal' = 'Get-AppxPackage *Microsoft.WindowsTerminal* | Remove-AppxPackage -AllUsers'; 'WordPad' = 'Remove-WindowsCapability -Online -Name "WordPad~~~~0.0.1.0" -NoRestart'; 'Xbox Apps' = 'Get-AppxPackage *Microsoft.Xbox* | Remove-AppxPackage -AllUsers; Get-AppxPackage *Microsoft.GamingApp* | Remove-AppxPackage -AllUsers'; 'Your Phone / Phone Link' = 'Get-AppxPackage *Microsoft.YourPhone* | Remove-AppxPackage -AllUsers'
     }
 
     foreach ($bloat in $formData.BloatwareToRemove) {
         if ($bloatwareCommands.ContainsKey($bloat)) {
-            $command = $bloatwareCommands[$bloat]; if ($command.StartsWith("#")) { continue }
+            $command = $bloatwareCommands[$bloat]; if ($command.StartsWith("#")) { continue } # Skip commented-out commands.
+            # Use PowerShell's -EncodedCommand for complex commands to avoid quoting issues.
             if ($command -match 'Get-AppxPackage|Remove-AppxPackage|Get-WindowsCapability|Remove-WindowsCapability|Disable-WindowsOptionalFeature|Start-Process') {
                 $bytes = [System.Text.Encoding]::Unicode.GetBytes($command); $encodedCommand = [Convert]::ToBase64String($bytes)
                 $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = "powershell.exe -EncodedCommand $encodedCommand"
@@ -893,39 +1212,136 @@ function Create-UnattendXml {
         Write-LogAndHost "Copy this file to the root of your Windows installation USB drive." -HostColor Yellow
     }
     catch {
-        Write-LogAndHost "ERROR: Failed to save the XML file to '$filePath'. Details: $($_.Exception.Message)" -HostColor Red
+        Write-LogAndHost "Failed to save the XML file to '$filePath'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Create-UnattendXml"
     }
     
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
     $null = Read-Host
 }
 
+# Function to install programs using Chocolatey.
+function Install-Programs {
+    param (
+        [string[]]$ProgramsToInstall,
+        [string]$Source = "https://community.chocolatey.org/api/v2/"
+    )
 
-# Function to test if a Chocolatey package exists
+    if ($ProgramsToInstall.Count -eq 0) {
+        Write-LogAndHost "No programs to install." -HostColor Yellow
+        return $true
+    }
+
+    $allSuccess = $true
+    Write-LogAndHost "Starting installation of $($ProgramsToInstall.Count) program(s)..." -HostColor Cyan
+    Write-Host ""
+
+    foreach ($program in $ProgramsToInstall) {
+        Write-LogAndHost "Installing $program..." -LogPrefix "Install-Programs"
+        try {
+            $installOutput = & choco install $program -y --source=$Source --no-progress 2>&1
+            $installOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+
+            if ($LASTEXITCODE -eq 0) {
+                # Check output to see if the program was already there.
+                if ($installOutput -match "is already installed|already installed|Nothing to do") {
+                    Write-LogAndHost "$program is already installed or up to date." -HostColor Green
+                } else {
+                    Write-LogAndHost "$program installed successfully." -HostColor White
+                }
+            } else {
+                $allSuccess = $false
+                Write-LogAndHost "Failed to install $program. Exit code: $LASTEXITCODE. Details: $($installOutput | Out-String)" -HostColor Red -LogPrefix "Install-Programs"
+            }
+        } catch {
+            $allSuccess = $false
+            Write-LogAndHost "Exception occurred while installing $program. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Install-Programs"
+        }
+        Write-Host ""
+    }
+    return $allSuccess
+}
+
+# Function to get a list of locally installed Chocolatey packages.
+function Get-InstalledChocolateyPackages {
+    $chocoLibPath = Join-Path -Path $env:ChocolateyInstall -ChildPath "lib"
+    $installedPackages = @()
+    if (Test-Path $chocoLibPath) {
+        try {
+            # Packages are stored as directories in the 'lib' folder.
+            $installedPackages = Get-ChildItem -Path $chocoLibPath -Directory | Select-Object -ExpandProperty Name
+            Write-LogAndHost "Found installed packages: $($installedPackages -join ', ')" -NoHost
+        } catch {
+            Write-LogAndHost "Could not retrieve installed packages from $chocoLibPath. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Get-InstalledChocolateyPackages"
+        }
+    } else {
+        Write-LogAndHost "Chocolatey lib directory not found at $chocoLibPath. Cannot list installed packages." -HostColor Yellow -LogPrefix "Get-InstalledChocolateyPackages"
+    }
+    return $installedPackages
+}
+
+# Function to uninstall programs using Chocolatey.
+function Uninstall-Programs {
+    param (
+        [string[]]$ProgramsToUninstall
+    )
+
+    if ($ProgramsToUninstall.Count -eq 0) {
+        Write-LogAndHost "No programs selected for uninstallation." -HostColor Yellow
+        return $true
+    }
+
+    $allSuccess = $true
+    Write-LogAndHost "Starting uninstallation of $($ProgramsToUninstall.Count) program(s)..." -HostColor Cyan
+    Write-Host ""
+
+    foreach ($program in $ProgramsToUninstall) {
+        Write-LogAndHost "Uninstalling $program..." -LogPrefix "Uninstall-Programs"
+        try {
+            $uninstallOutput = & choco uninstall $program -y --no-progress 2>&1
+            $uninstallOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-LogAndHost "$program uninstalled successfully." -HostColor White
+            } else {
+                $allSuccess = $false
+                Write-LogAndHost "Failed to uninstall $program. Exit code: $LASTEXITCODE. Details: $($uninstallOutput | Out-String)" -HostColor Red -LogPrefix "Uninstall-Programs"
+            }
+        } catch {
+            $allSuccess = $false
+            Write-LogAndHost "Exception occurred while uninstalling $program. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Uninstall-Programs"
+        }
+        Write-Host ""
+    }
+    return $allSuccess
+}
+
+# Function to test if a Chocolatey package exists in the repository.
 function Test-ChocolateyPackage {
     param (
         [string]$PackageName
     )
     Write-LogAndHost "Searching for package '$PackageName' in Chocolatey repository..." -NoLog
     try {
+        # Use --exact and --limit-output for a fast, clean search.
         $searchOutput = & choco search $PackageName --exact --limit-output --source="https://community.chocolatey.org/api/v2/" --no-progress 2>&1
         $searchOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
 
         if ($LASTEXITCODE -ne 0) {
-             Write-LogAndHost "Error during 'choco search' for '$PackageName'. Exit code: $LASTEXITCODE. Output: $($searchOutput | Out-String)" -HostColor Red
+             Write-LogAndHost "Error during 'choco search' for '$PackageName'. Exit code: $LASTEXITCODE. Output: $($searchOutput | Out-String)" -HostColor Red -LogPrefix "Test-ChocolateyPackage"
              return $false
         }
         
+        # Check if the output indicates that one package was found.
         if ($searchOutput -match "$([regex]::Escape($PackageName))\|.*" -or $searchOutput -match "1 packages found.") {
-             Write-LogAndHost "Package '$PackageName' found in repository. Search output: $($searchOutput | Select-Object -First 1)" -HostColor Green
+             Write-LogAndHost "Package '$PackageName' found in repository." -HostColor Green
              return $true
         } else {
-             Write-LogAndHost "Package '$PackageName' not found as an exact match in Chocolatey repository. Search output: $($searchOutput | Out-String)" -HostColor Yellow
+             Write-LogAndHost "Package '$PackageName' not found as an exact match in Chocolatey repository. Search output: $($searchOutput | Out-String)" -HostColor Yellow -LogPrefix "Test-ChocolateyPackage"
              return $false
         }
 
     } catch {
-        Write-LogAndHost "ERROR: Exception occurred while searching for package '$PackageName'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during package search for '$PackageName' - "
+        Write-LogAndHost "Exception occurred while searching for package '$PackageName'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Test-ChocolateyPackage"
         return $false
     }
 }
@@ -1010,11 +1426,7 @@ function Show-PerdangaArt {
     $null = Read-Host
 }
 
-
-# ============================================================================
-# =====               START OF CORRECTED Show-Menu FUNCTION              =====
-# ============================================================================
-# CORRECTED FUNCTION: Display the selection menu, fixes centering in fullscreen.
+# CORRECTED FUNCTION: Displays the selection menu, with robust centering for all console sizes.
 function Show-Menu {
     Clear-Host
 
@@ -1036,11 +1448,11 @@ function Show-Menu {
         "             _\/\\\///////____/\\\///\\\__\/\\\/////\\\___/\\\/////\\\_\//\\\__/\\\____/\\\/////\\\_\/\\\/////\\\___________________",
         "              _\/\\\__________/\\\__\//\\\_\/\\\___\///___/\\\\\\\\\\\___\//\\\/\\\____/\\\\\\\\\\\__\/\\\___\///____________________",
         "               _\/\\\_________\//\\\///\\\__\/\\\_________\//\\///////_____\//\\\\\____\//\\///////___\/\\\___________________________",
-        "                _\/\\\__________\///\\\\\/___\/\\\__________\//\\\\\\\\\\____\//\\\_____\//\\\\\\\\\\_ \/\\\___________________________",
+        "                _\/\\\__________\///\\\\\/___\/\\\__________\//\\\\\\\\\\____\//\\\-----\//\\\\\\\\\\_ \/\\\___________________________",
         "                 _\///_____________\/////_____\///____________\//////////______\///______\//////////____\///____________________________"
     )
 
-    # --- Menu Content Generation (Original logic is kept) ---
+    # --- Menu Content Generation ---
     $menuLines = New-Object System.Collections.Generic.List[string]
     $fixedMenuWidth = 80 
     $pssText = "Perdanga Software Solutions"
@@ -1053,7 +1465,7 @@ function Show-Menu {
     $menuLines.Add($pssUnderline)
     $menuLines.Add($centeredPssTextLine)
     $menuLines.Add($dashedLine)
-    $menuLines.Add(" Chocolatey Package Manager [PSS v1.4] ($(Get-Date -Format "dd.MM.yyyy HH:mm"))") 
+    $menuLines.Add(" Windows & Software Manager [PSS v1.5] ($(Get-Date -Format "dd.MM.yyyy HH:mm"))") 
     $menuLines.Add(" Log saved to: $(Split-Path -Leaf $script:logFile)")
     $menuLines.Add(" $($script:sortedPrograms.Count) programs available for installation")
     $menuLines.Add($pssUnderline)
@@ -1113,8 +1525,9 @@ function Show-Menu {
         @{ Left = "[A] Install All Programs";              Right = "[W] Activate Windows" },
         @{ Left = "[G] Select Specific Programs [GUI]";    Right = "[N] Update Windows" },
         @{ Left = "[U] Uninstall Programs [GUI]";          Right = "[T] Disable Windows Telemetry" },
-        @{ Left = "[C] Install Custom Program";            Right = "[F] Create Unattend.xml File [GUI]" },
-        @{ Left = "[X] Activate Spotify";                  Right = "" }
+        @{ Left = "[C] Install Custom Program";            Right = "[S] System Cleanup [GUI]" },
+        @{ Left = "[X] Activate Spotify";                  Right = "[F] Create Unattend.xml File [GUI]" },
+        @{ Left = "[P] Import & Install from File";        Right = "[I] Show System Information" }
     )
 
     $column1Width = ($optionPairs.Left | Measure-Object -Property Length -Maximum).Maximum + 5
@@ -1135,39 +1548,35 @@ function Show-Menu {
     
     $menuLines.Add($optionsUnderline)
 
-    # --- Calculate Padding (REVISED) ---
-    # This section is updated for reliability.
+    # --- Calculate Padding (REVISED for dynamic console width) ---
     $consoleWidth = 0
     try {
-        # Try .NET method first, which can be more reliable in some non-standard hosts.
+        # This is the most reliable way to get the current window width.
         $consoleWidth = [System.Console]::WindowWidth
     } catch {}
 
-    if ($consoleWidth -le 1) { # If it failed or returned an unusable value
+    if ($consoleWidth -le 1) { 
         try {
-            # Fallback to PowerShell host-specific property.
+            # Fallback for environments where the above fails (like some ISE versions).
             $consoleWidth = $Host.UI.RawUI.WindowSize.Width
         } catch {}
     }
-    # If both methods fail, use a reasonable default.
     if ($consoleWidth -le 1) {
+        # Final fallback to a default width if all else fails.
         $consoleWidth = 120 
     }
 
-    # Padding for the menu block (which has a fixed width of 80)
     $menuPaddingValue = [math]::Floor(($consoleWidth - $fixedMenuWidth) / 2)
     if ($menuPaddingValue -lt 0) { $menuPaddingValue = 0 }
     $menuPaddingString = " " * $menuPaddingValue
 
-    # Padding for the ASCII art (calculated based on its own, wider dimensions)
     $artWidth = ($asciiArt | Measure-Object -Property Length -Maximum).Maximum
     $artPaddingValue = [math]::Floor(($consoleWidth - $artWidth) / 2)
     if ($artPaddingValue -lt 0) { $artPaddingValue = 0 }
     $artPaddingString = " " * $artPaddingValue
 
 
-    # --- Display Logic (REVISED) ---
-    # This section is updated to use the new padding and has a simplified animation.
+    # --- Display Logic ---
     if ($script:firstRun) {
         # --- Animated Reveal on First Run ---
         foreach ($line in $asciiArt) {
@@ -1197,39 +1606,19 @@ function Show-Menu {
     
     Write-Host "" 
     $promptTextForOneLine = "Enter option, single number, or list of numbers:"
-    # Center the prompt text within the menu's fixed width
     $promptInternalPadding = [math]::Floor(($fixedMenuWidth - $promptTextForOneLine.Length) / 2)
     if ($promptInternalPadding -lt 0) { $promptInternalPadding = 0 }
     $centeredPromptText = (" " * $promptInternalPadding) + $promptTextForOneLine
     
-    # Now, add the main menu padding to center the entire prompt line
     Write-Host ($menuPaddingString + $centeredPromptText) -NoNewline -ForegroundColor Yellow
 }
-# ============================================================================
-# =====                END OF CORRECTED Show-Menu FUNCTION               =====
-# ============================================================================
+
+Write-LogAndHost "Core functions loaded successfully." -NoHost
 
 
-# Log that the functions library has been loaded successfully
-Write-LogAndHost "Functions library loaded." -NoHost
-
-<#
-================================================================================
-================================================================================
-                               PART 2: CONFIGURATION
-================================================================================
-================================================================================
-#>
-
-<#
-.SYNOPSIS
-    Configuration file for Perdanga Software Solutions.
-.DESCRIPTION
-    This file contains all the user-configurable variables for the main script,
-    such as the list of programs to install.
-.NOTES
-    This script is dot-sourced by the main script and runs in its scope.
-#>
+# ================================================================================
+#                               PART 3: CONFIGURATION
+# ================================================================================
 
 # --- PROGRAM DEFINITIONS ---
 # Edit this list to add or remove programs.
@@ -1245,8 +1634,8 @@ $programs = @(
     "imageglass",
     "nilesoft-shell",
     "nvidia-app",
-    "obs-studio",
     "occt",
+    "obs-studio",
     "qbittorrent",
     "revo-uninstaller",
     "spotify",
@@ -1260,115 +1649,94 @@ $programs = @(
 
 # --- SCRIPT-WIDE VARIABLES ---
 $script:sortedPrograms = $programs | Sort-Object
-$script:mainMenuLetters = @('a', 'c', 'e', 'f', 'g', 'n', 't', 'u', 'w', 'x')
-# FIX: Regex now properly handles single letters by joining with '|'
+$script:mainMenuLetters = @('a', 'c', 'e', 'f', 'g', 'i', 'n', 'p', 's', 't', 'u', 'w', 'x')
 $script:mainMenuRegexPattern = "^(perdanga|" + ($script:mainMenuLetters -join '|') + "|[0-9,\s]+)$"
 $script:availableProgramNumbers = 1..($script:sortedPrograms.Count) | ForEach-Object { $_.ToString() }
 $script:programToNumberMap = @{}
 $script:numberToProgramMap = @{}
 
-if ($script:sortedPrograms.Count -gt $script:availableProgramNumbers.Count) {
-    Write-LogAndHost "WARNING: Not enough unique numbers available to assign to all programs." -ForegroundColor Yellow -LogPrefix "CRITICAL WARNING: "
-}
-
+# Dynamically create maps for selecting programs by number.
 for ($i = 0; $i -lt $script:sortedPrograms.Count; $i++) {
-    if ($i -lt $script:availableProgramNumbers.Count) {
-        $assignedNumber = $script:availableProgramNumbers[$i]
-        $programName = $script:sortedPrograms[$i]
-        $script:programToNumberMap[$programName] = $assignedNumber
-        $script:numberToProgramMap[$assignedNumber] = $programName
-    } else {
-        Write-LogAndHost "WARNING: Ran out of assignable numbers. Program '$($script:sortedPrograms[$i])' will not be selectable by number." -LogPrefix "WARNING: "
-        break
-    }
+    $assignedNumber = $script:availableProgramNumbers[$i]
+    $programName = $script:sortedPrograms[$i]
+    $script:programToNumberMap[$programName] = $assignedNumber
+    $script:numberToProgramMap[$assignedNumber] = $programName
 }
 
 Write-LogAndHost "Configuration loaded. $($script:sortedPrograms.Count) programs defined." -NoHost
 
-<#
-================================================================================
-================================================================================
-                                PART 3: MAIN SCRIPT
-================================================================================
-================================================================================
-#>
 
-<#
-.SYNOPSIS
-    Main script for Perdanga Software Solutions to install and manage programs using Chocolatey.
-.DESCRIPTION
-    This is the main entry point for the script.
-.NOTES
-    Author: Roman Zhdanov
-    Version: 1.4
-#>
+# ================================================================================
+#                                PART 4: MAIN SCRIPT
+# ================================================================================
 
-# --- INITIAL SETUP ---
+# --- INITIAL CHECKS & SETUP ---
 if ($PSVersionTable.PSVersion -eq $null) {
     Write-Host "ERROR: This script must be run in PowerShell." -ForegroundColor Red
     exit 1
 }
 
+# Ensure correct encoding for output.
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# Attempt to resize the console window and buffer for a better viewing experience.
 try {
     $Host.UI.RawUI.BufferSize = New-Object Management.Automation.Host.Size(150, 3000)
     $Host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(150, 50)
 } catch {
-    Write-LogAndHost "WARNING: Could not set console buffer or window size. Error: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-LogAndHost "Could not set console buffer or window size. Error: $($_.Exception.Message)" -ForegroundColor Yellow -LogPrefix "Initial-Setup"
 }
 
 # --- SCRIPT-WIDE CHECKS ---
 $script:activationAttempted = $false
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-LogAndHost "ERROR: This script must be run as Administrator." -ForegroundColor Red
-    "[$((Get-Date))] Error: Script not run as Administrator." | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+    Write-LogAndHost "This script must be run as Administrator." -ForegroundColor Red -LogPrefix "Startup-Check"
+    "[$((Get-Date))] [Startup-Check] ERROR: Script not run as Administrator." | Out-File -FilePath $script:logFile -Append -Encoding UTF8
     exit 1
 }
 
+# Check if Windows Forms is available for GUI features.
 $script:guiAvailable = $true
 try { Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop }
-catch { $script:guiAvailable = $false; "[$((Get-Date))] Warning: GUI is not available - $($_.Exception.Message)" | Out-File -FilePath $script:logFile -Append -Encoding UTF8 }
+catch { 
+    $script:guiAvailable = $false
+    Write-LogAndHost "GUI features are not available. Error: $($_.Exception.Message)" -HostColor Yellow -LogPrefix "Startup-Check"
+}
 
 
 # --- CHOCOLATEY INITIALIZATION ---
 Write-LogAndHost "Checking Chocolatey installation..."
 try {
     if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-        if (-not (Install-Chocolatey)) { Write-LogAndHost "ERROR: Chocolatey is required to proceed. Exiting script." -HostColor Red; exit 1 }
-        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) { Write-LogAndHost "ERROR: Chocolatey command not found after installation. Please install manually." -HostColor Red; exit 1 }
+        if (-not (Install-Chocolatey)) { Write-LogAndHost "Chocolatey is required to proceed. Exiting script." -HostColor Red -LogPrefix "Choco-Init"; exit 1 }
+        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) { Write-LogAndHost "Chocolatey command not found after installation. Please install manually." -HostColor Red -LogPrefix "Choco-Init"; exit 1 }
         if (-not $env:ChocolateyInstall) { $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey"; Write-LogAndHost "ChocolateyInstall environment variable set to: $env:ChocolateyInstall" -NoHost }
     } else {
          if (-not $env:ChocolateyInstall) { $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey"; Write-LogAndHost "ChocolateyInstall environment variable set to: $env:ChocolateyInstall" -NoHost }
     }
     $chocoVersion = & choco --version 2>&1
-    if ($LASTEXITCODE -ne 0) { Write-LogAndHost "ERROR: Chocolatey is not functioning correctly. Exit code: $LASTEXITCODE" -HostColor Red; exit 1 }
+    if ($LASTEXITCODE -ne 0) { Write-LogAndHost "Chocolatey is not functioning correctly. Exit code: $LASTEXITCODE" -HostColor Red -LogPrefix "Choco-Init"; exit 1 }
     Write-LogAndHost "Found Chocolatey version: $($chocoVersion -join ' ')"
 }
-catch { Write-LogAndHost "ERROR: Exception occurred while checking Chocolatey. $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Exception during Chocolatey check - "; exit 1 }
+catch { Write-LogAndHost "Exception occurred while checking Chocolatey. $($_.Exception.Message)" -HostColor Red -LogPrefix "Choco-Init"; exit 1 }
 
-Write-Host ""; Write-LogAndHost "Clearing Chocolatey cache..."
+Write-Host ""; Write-LogAndHost "Enabling Chocolatey features for a smoother experience..."
 try {
-    & choco cache remove --all 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
-    if ($LASTEXITCODE -eq 0) { Write-LogAndHost "Cache cleared." } else { Write-LogAndHost "WARNING: Failed to clear Chocolatey cache. $($LASTEXITCODE)" -HostColor Yellow }
-} catch { Write-LogAndHost "ERROR: Exception clearing Chocolatey cache. $($_.Exception.Message)" -HostColor Red }
-
-Write-Host ""; Write-LogAndHost "Enabling automatic confirmation..."
-try {
+    # Enable global confirmation to prevent prompts during installations.
     & choco feature enable -n allowGlobalConfirmation 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
-    if ($LASTEXITCODE -eq 0) { Write-LogAndHost "Automatic confirmation enabled." } else { Write-LogAndHost "WARNING: Failed to enable automatic confirmation. $($LASTEXITCODE)" -HostColor Yellow }
-} catch { Write-LogAndHost "ERROR: Exception enabling automatic confirmation. $($_.Exception.Message)" -HostColor Red }
+    if ($LASTEXITCODE -eq 0) { Write-LogAndHost "Automatic confirmation enabled." } else { Write-LogAndHost "Failed to enable automatic confirmation. $($LASTEXITCODE)" -HostColor Yellow -LogPrefix "Choco-Init" }
+} catch { Write-LogAndHost "Exception enabling automatic confirmation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Choco-Init" }
 Write-Host ""
 
-# Set a flag to run the menu animation only once.
+# Set a flag to run the menu animation only once per session.
 $script:firstRun = $true
 
 # --- MAIN LOOP ---
 do {
     Show-Menu
-    try { $userInput = Read-Host } catch { Write-LogAndHost "ERROR: Could not read user input. $($_.Exception.Message)" -HostColor Red; Start-Sleep -Seconds 2; continue }
+    try { $userInput = Read-Host } catch { Write-LogAndHost "Could not read user input. $($_.Exception.Message)" -HostColor Red -LogPrefix "Main-Loop"; Start-Sleep -Seconds 2; continue }
     $userInput = $userInput.Trim().ToLower()
 
     # --- EASTER EGG CHECK ---
@@ -1382,26 +1750,21 @@ do {
         Write-LogAndHost "Press any key to return to the menu..." -HostColor DarkGray -NoLog; $null = Read-Host; continue
     }
     
-    # This block is no longer needed because the corrected regex handles all cases.
-    # The final 'else' block will catch any valid-but-unhandled patterns.
-    # if ($userInput -and $userInput -notmatch $script:mainMenuRegexPattern) { ... }
-
+    # --- PROCESS USER INPUT ---
+    # Case 1: A single letter command was entered.
     if ($script:mainMenuLetters -contains $userInput) {
         switch ($userInput) {
             'e' {
                 Write-LogAndHost "Exiting script..."
-                try { & choco feature disable -n allowGlobalConfirmation 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8 } catch { Write-LogAndHost "ERROR: Exception disabling auto-confirm - $($_.Exception.Message)" -HostColor Red }
-                # The --local-only argument is deprecated and removed in recent Chocolatey versions. This command correctly lists locally installed packages.
-                try { & choco list 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8 } catch { Write-LogAndHost "ERROR: Exception listing installed programs - $($_.Exception.Message)" -HostColor Red }
+                try { & choco feature disable -n allowGlobalConfirmation 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8 } catch { Write-LogAndHost "Exception disabling auto-confirm - $($_.Exception.Message)" -HostColor Red -LogPrefix "Main-Loop" }
                 exit 0
             }
             'a' {
                 Clear-Host
                 try {
-                    # ENHANCEMENT: Log the user prompt.
-                    Write-LogAndHost "Are you sure you want to install all programs? (y/n)" -HostColor Yellow
+                    Write-LogAndHost "Are you sure you want to install all programs? (y/n)" -HostColor Yellow -LogPrefix "Main-Loop"
                     $confirmInput = Read-Host
-                } catch { Write-LogAndHost "ERROR: Could not read user input." -HostColor Red; Start-Sleep -Seconds 2; continue }
+                } catch { Write-LogAndHost "Could not read user input." -HostColor Red -LogPrefix "Main-Loop"; Start-Sleep -Seconds 2; continue }
                 if ($confirmInput.Trim().ToLower() -eq 'y') {
                     Write-LogAndHost "User chose to install all programs." -NoHost; Clear-Host
                     if (Install-Programs -ProgramsToInstall $script:sortedPrograms) { Write-LogAndHost "All programs installation process completed." } else { Write-LogAndHost "Some programs may not have installed correctly. Check log." -HostColor Yellow }
@@ -1411,45 +1774,45 @@ do {
             'g' {
                 if ($script:guiAvailable) {
                     Write-LogAndHost "User chose GUI-based installation." -NoHost
-                    $form = New-Object System.Windows.Forms.Form; $form.Text = "Perdanga GUI - Install Programs"; $form.Size = New-Object System.Drawing.Size(400, 450); $form.StartPosition = "CenterScreen"; $form.FormBorderStyle = "FixedDialog"; $form.MaximizeBox = $false; $form.BackColor = [System.Drawing.Color]::FromArgb(0, 30, 60)
-                    $panel = New-Object System.Windows.Forms.Panel; $panel.Size = New-Object System.Drawing.Size(360, 350); $panel.Location = New-Object System.Drawing.Point(10, 10); $panel.AutoScroll = $true; $panel.BackColor = [System.Drawing.Color]::FromArgb(0, 30, 60); $form.Controls.Add($panel)
+                    $form = New-Object System.Windows.Forms.Form; $form.Text = "Perdanga GUI - Install Programs"; $form.Size = New-Object System.Drawing.Size(400, 450); $form.StartPosition = "CenterScreen"; $form.FormBorderStyle = "FixedDialog"; $form.MaximizeBox = $false; $form.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
+                    $panel = New-Object System.Windows.Forms.Panel; $panel.Size = New-Object System.Drawing.Size(360, 350); $panel.Location = New-Object System.Drawing.Point(10, 10); $panel.AutoScroll = $true; $panel.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $form.Controls.Add($panel)
                     $checkboxes = @(); $yPos = 10
                     for ($i = 0; $i -lt $script:sortedPrograms.Length; $i++) {
                         $progName = $script:sortedPrograms[$i]; $dispNumber = $script:programToNumberMap[$progName]; $displayText = "$($dispNumber). $progName".PadRight(30)
-                        $checkbox = New-Object System.Windows.Forms.CheckBox; $checkbox.Text = $displayText; $checkbox.Location = New-Object System.Drawing.Point(10, $yPos); $checkbox.Size = New-Object System.Drawing.Size(330, 24); $checkbox.Font = New-Object System.Drawing.Font("Arial", 12); $checkbox.ForeColor = [System.Drawing.Color]::White; $checkbox.BackColor = [System.Drawing.Color]::FromArgb(0, 30, 60); $panel.Controls.Add($checkbox); $checkboxes += $checkbox; $yPos += 28
+                        $checkbox = New-Object System.Windows.Forms.CheckBox; $checkbox.Text = $displayText; $checkbox.Location = New-Object System.Drawing.Point(10, $yPos); $checkbox.Size = New-Object System.Drawing.Size(330, 24); $checkbox.Font = New-Object System.Drawing.Font("Segoe UI", 10); $checkbox.ForeColor = [System.Drawing.Color]::White; $checkbox.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $panel.Controls.Add($checkbox); $checkboxes += $checkbox; $yPos += 28
                     }
-                    $okButton = New-Object System.Windows.Forms.Button; $okButton.Text = "Install Selected"; $okButton.Location = New-Object System.Drawing.Point(140, 370); $okButton.Size = New-Object System.Drawing.Size(120, 30); $okButton.Font = New-Object System.Drawing.Font("Arial", 10); $okButton.ForeColor = [System.Drawing.Color]::White; $okButton.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180); $okButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat; $okButton.FlatAppearance.BorderSize = 0; $okButton.Add_Click({ $form.DialogResult = [System.Windows.Forms.DialogResult]::OK; $form.Close() }); $form.Controls.Add($okButton)
+                    $okButton = New-Object System.Windows.Forms.Button; $okButton.Text = "Install Selected"; $okButton.Location = New-Object System.Drawing.Point(140, 370); $okButton.Size = New-Object System.Drawing.Size(120, 30); $okButton.Font = New-Object System.Drawing.Font("Segoe UI", 10); $okButton.ForeColor = [System.Drawing.Color]::White; $okButton.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180); $okButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat; $okButton.FlatAppearance.BorderSize = 0; $okButton.Add_Click({ $form.DialogResult = [System.Windows.Forms.DialogResult]::OK; $form.Close() }); $form.Controls.Add($okButton)
                     Clear-Host
                     $result = $form.ShowDialog()
                     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
                         $selectedProgramsFromGui = @(); for ($i = 0; $i -lt $checkboxes.Length; $i++) { if ($checkboxes[$i].Checked) { $selectedProgramsFromGui += $script:sortedPrograms[$i] } }
                         if ($selectedProgramsFromGui.Count -eq 0) { Write-LogAndHost "No programs selected via GUI for installation." }
-                        else { Clear-Host; if (Install-Programs -ProgramsToInstall $selectedProgramsFromGui) { Write-LogAndHost "Selected programs installation process completed. Perdanga Forever." } else { Write-LogAndHost "Some GUI selected programs failed to install." -HostColor Yellow } }
+                        else { Clear-Host; if (Install-Programs -ProgramsToInstall $selectedProgramsFromGui) { Write-LogAndHost "Selected programs installation process completed." } else { Write-LogAndHost "Some GUI selected programs failed to install." -HostColor Yellow } }
                         Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
                     } else { Write-LogAndHost "GUI installation cancelled by user." }
-                } else { Clear-Host; Write-LogAndHost "ERROR: GUI selection (g) is not available." -HostColor Red; Start-Sleep -Seconds 2; }
+                } else { Clear-Host; Write-LogAndHost "GUI selection (g) is not available." -HostColor Red -LogPrefix "Main-Loop"; Start-Sleep -Seconds 2; }
             }
             'u' {
                 if ($script:guiAvailable) {
                     Write-LogAndHost "User chose GUI-based uninstallation." -NoHost
                     $installedChocoPackages = Get-InstalledChocolateyPackages
                     if ($installedChocoPackages.Count -eq 0) { Clear-Host; Write-LogAndHost "No Chocolatey packages found to uninstall." -HostColor Yellow; Start-Sleep -Seconds 2; continue }
-                    $form = New-Object System.Windows.Forms.Form; $form.Text = "Perdanga GUI - Uninstall Programs"; $form.Size = New-Object System.Drawing.Size(400, 450); $form.StartPosition = "CenterScreen"; $form.FormBorderStyle = "FixedDialog"; $form.MaximizeBox = $false; $form.BackColor = [System.Drawing.Color]::FromArgb(60, 0, 0)
-                    $panel = New-Object System.Windows.Forms.Panel; $panel.Size = New-Object System.Drawing.Size(360, 350); $panel.Location = New-Object System.Drawing.Point(10, 10); $panel.AutoScroll = $true; $panel.BackColor = [System.Drawing.Color]::FromArgb(60, 0, 0); $form.Controls.Add($panel)
+                    $form = New-Object System.Windows.Forms.Form; $form.Text = "Perdanga GUI - Uninstall Programs"; $form.Size = New-Object System.Drawing.Size(400, 450); $form.StartPosition = "CenterScreen"; $form.FormBorderStyle = "FixedDialog"; $form.MaximizeBox = $false; $form.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
+                    $panel = New-Object System.Windows.Forms.Panel; $panel.Size = New-Object System.Drawing.Size(360, 350); $panel.Location = New-Object System.Drawing.Point(10, 10); $panel.AutoScroll = $true; $panel.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $form.Controls.Add($panel)
                     $checkboxes = @(); $yPos = 10
                     foreach ($packageName in ($installedChocoPackages | Sort-Object)) {
-                        $checkbox = New-Object System.Windows.Forms.CheckBox; $checkbox.Text = $packageName; $checkbox.Location = New-Object System.Drawing.Point(10, $yPos); $checkbox.Size = New-Object System.Drawing.Size(330, 24); $checkbox.Font = New-Object System.Drawing.Font("Arial", 12); $checkbox.ForeColor = [System.Drawing.Color]::White; $checkbox.BackColor = [System.Drawing.Color]::FromArgb(60, 0, 0); $panel.Controls.Add($checkbox); $checkboxes += $checkbox; $yPos += 28
+                        $checkbox = New-Object System.Windows.Forms.CheckBox; $checkbox.Text = $packageName; $checkbox.Location = New-Object System.Drawing.Point(10, $yPos); $checkbox.Size = New-Object System.Drawing.Size(330, 24); $checkbox.Font = New-Object System.Drawing.Font("Segoe UI", 10); $checkbox.ForeColor = [System.Drawing.Color]::White; $checkbox.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48); $panel.Controls.Add($checkbox); $checkboxes += $checkbox; $yPos += 28
                     }
-                    $okButton = New-Object System.Windows.Forms.Button; $okButton.Text = "Uninstall Selected"; $okButton.Location = New-Object System.Drawing.Point(130, 370); $okButton.Size = New-Object System.Drawing.Size(140, 30); $okButton.Font = New-Object System.Drawing.Font("Arial", 10); $okButton.ForeColor = [System.Drawing.Color]::White; $okButton.BackColor = [System.Drawing.Color]::FromArgb(180, 70, 70); $okButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat; $okButton.FlatAppearance.BorderSize = 0; $okButton.Add_Click({ $form.DialogResult = [System.Windows.Forms.DialogResult]::OK; $form.Close() }); $form.Controls.Add($okButton)
+                    $okButton = New-Object System.Windows.Forms.Button; $okButton.Text = "Uninstall Selected"; $okButton.Location = New-Object System.Drawing.Point(130, 370); $okButton.Size = New-Object System.Drawing.Size(140, 30); $okButton.Font = New-Object System.Drawing.Font("Segoe UI", 10); $okButton.ForeColor = [System.Drawing.Color]::White; $okButton.BackColor = [System.Drawing.Color]::FromArgb(180, 70, 70); $okButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat; $okButton.FlatAppearance.BorderSize = 0; $okButton.Add_Click({ $form.DialogResult = [System.Windows.Forms.DialogResult]::OK; $form.Close() }); $form.Controls.Add($okButton)
                     Clear-Host
                     $result = $form.ShowDialog()
                     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
                         $selectedProgramsToUninstall = @(); foreach ($cb in $checkboxes) { if ($cb.Checked) { $selectedProgramsToUninstall += $cb.Text } }
                         if ($selectedProgramsToUninstall.Count -eq 0) { Write-LogAndHost "No programs selected via GUI for uninstallation." }
-                        else { Clear-Host; if (Uninstall-Programs -ProgramsToUninstall $selectedProgramsToUninstall) { Write-LogAndHost "Selected programs uninstallation process completed. Perdanga Forever." } else { Write-LogAndHost "Some GUI selected programs failed to uninstall." -HostColor Yellow } }
+                        else { Clear-Host; if (Uninstall-Programs -ProgramsToUninstall $selectedProgramsToUninstall) { Write-LogAndHost "Selected programs uninstallation process completed." } else { Write-LogAndHost "Some GUI selected programs failed to uninstall." -HostColor Yellow } }
                         Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
                     } else { Write-LogAndHost "GUI uninstallation cancelled by user." }
-                } else { Clear-Host; Write-LogAndHost "ERROR: GUI uninstallation (u) is not available." -HostColor Red; Start-Sleep -Seconds 2; }
+                } else { Clear-Host; Write-LogAndHost "GUI uninstallation (u) is not available." -HostColor Red -LogPrefix "Main-Loop"; Start-Sleep -Seconds 2; }
             }
             'c' {
                 Clear-Host
@@ -1458,7 +1821,7 @@ do {
                     $customPackageName = Read-Host "Enter the exact Chocolatey package ID (e.g., 'notepadplusplus.install', 'git')"
                     $customPackageName = $customPackageName.Trim()
                 } catch {
-                    Write-LogAndHost "ERROR: Could not read user input for custom package name. $($_.Exception.Message)" -HostColor Red -LogPrefix "Error: Failed to read custom package name input - "
+                    Write-LogAndHost "Could not read user input for custom package name. $($_.Exception.Message)" -HostColor Red -LogPrefix "Main-Loop"
                     Start-Sleep -Seconds 2
                     continue
                 }
@@ -1471,7 +1834,6 @@ do {
                 
                 Write-LogAndHost "Checking if package '$customPackageName' exists..."
                 if (Test-ChocolateyPackage -PackageName $customPackageName) {
-                    # ENHANCEMENT: Log the user prompt.
                     Write-LogAndHost "Package '$customPackageName' found. Proceed with installation?" -HostColor Yellow
                     try {
                         $confirmInstallCustom = Read-Host "(Type y/n then press Enter)"
@@ -1479,15 +1841,15 @@ do {
                             Write-LogAndHost "User confirmed installation of custom package '$customPackageName'." -NoHost
                             Clear-Host
                             if (Install-Programs -ProgramsToInstall @($customPackageName)) {
-                                Write-LogAndHost "Custom package '$customPackageName' installation process completed. Perdanga Forever."
+                                Write-LogAndHost "Custom package '$customPackageName' installation process completed."
                             } else {
-                                Write-LogAndHost "Failed to install custom package '$customPackageName'. Check log: $(Split-Path -Leaf $script:logFile)" -HostColor Red
+                                Write-LogAndHost "Failed to install custom package '$customPackageName'. Check log for details." -HostColor Red
                             }
                         } else {
                             Write-LogAndHost "Installation of custom package '$customPackageName' cancelled by user." -HostColor Yellow
                         }
                     } catch {
-                         Write-LogAndHost "ERROR: Could not read user input for custom package installation confirmation. $($_.Exception.Message)" -HostColor Red
+                         Write-LogAndHost "Could not read user input for custom package installation confirmation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Main-Loop"
                          Start-Sleep -Seconds 2
                     }
                 } else {
@@ -1502,15 +1864,18 @@ do {
             'n' {
                 Clear-Host
                 try {
-                    # ENHANCEMENT: Log the user prompt.
-                    Write-LogAndHost "This will install Windows Updates. Proceed? (y/n)" -HostColor Yellow
+                    Write-LogAndHost "This will install Windows Updates. Proceed? (y/n)" -HostColor Yellow -LogPrefix "Main-Loop"
                     $confirmInput = Read-Host
-                } catch { Write-LogAndHost "ERROR: Could not read user input." -HostColor Red; Start-Sleep -Seconds 2; continue }
+                } catch { Write-LogAndHost "Could not read user input." -HostColor Red -LogPrefix "Main-Loop"; Start-Sleep -Seconds 2; continue }
                 if ($confirmInput.Trim().ToLower() -eq 'y') { Clear-Host; Invoke-WindowsUpdate; Write-LogAndHost "Windows Update process finished." } else { Write-LogAndHost "Update process cancelled." }
             }
             'f' { Clear-Host; Create-UnattendXml }
+            's' { Clear-Host; Invoke-TempFileCleanup }
+            'i' { Clear-Host; Show-SystemInfo }
+            'p' { Clear-Host; Import-ProgramSelection }
         }
     }
+    # Case 2: A list of numbers (separated by commas or spaces) was entered.
     elseif ($userInput -match '[, ]+') {
         Clear-Host
         $selectedIndividualInputs = $userInput -split '[, ]+' | ForEach-Object { $_.Trim() } | Where-Object {$_ -ne ""}
@@ -1532,41 +1897,40 @@ do {
             Write-LogAndHost "Selected for installation: $($validProgramNamesToInstall -join ', ')" -HostColor Cyan -NoLog
             if ($invalidNumbersInList.Count -gt 0) { Write-LogAndHost "Invalid/skipped inputs: $($invalidNumbersInList -join ', ')" -HostColor Yellow -NoLog }
             try {
-                # ENHANCEMENT: Log the user prompt.
                 Write-LogAndHost "Install these $($validProgramNamesToInstall.Count) program(s)? (Type y/n then press Enter)" -HostColor Yellow
                 $confirmMultiInput = Read-Host
-            } catch { Write-LogAndHost "ERROR: Could not read user input. $($_.Exception.Message)" -HostColor Red; Start-Sleep -Seconds 2; continue }
+            } catch { Write-LogAndHost "Could not read user input. $($_.Exception.Message)" -HostColor Red -LogPrefix "Main-Loop"; Start-Sleep -Seconds 2; continue }
             
             if ($confirmMultiInput.Trim().ToLower() -eq 'y') {
                 Clear-Host
-                if (Install-Programs -ProgramsToInstall $validProgramNamesToInstall) { Write-LogAndHost "Selected programs installation process completed. Perdanga Forever." }
-                else { Write-LogAndHost "Some selected programs failed. Check log: $(Split-Path -Leaf $script:logFile)" -HostColor Yellow }
+                if (Install-Programs -ProgramsToInstall $validProgramNamesToInstall) { Write-LogAndHost "Selected programs installation process completed." }
+                else { Write-LogAndHost "Some selected programs failed. Check log for details." -HostColor Yellow }
                 Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
             } else { Write-LogAndHost "Installation of selected programs cancelled." }
         }
     }
+    # Case 3: A single, valid program number was entered.
     elseif ($script:numberToProgramMap.ContainsKey($userInput)) {
         $programToInstall = $script:numberToProgramMap[$userInput]
         Clear-Host
         try {
-            # ENHANCEMENT: Log the user prompt.
             Write-LogAndHost "Install '$($programToInstall)' (program #$($userInput))? (Type y/n then press Enter)" -HostColor Yellow
             $confirmSingleInput = Read-Host
-        } catch { Write-LogAndHost "ERROR: Could not read user input. $($_.Exception.Message)" -HostColor Red; Start-Sleep -Seconds 2; continue }
+        } catch { Write-LogAndHost "Could not read user input. $($_.Exception.Message)" -HostColor Red -LogPrefix "Main-Loop"; Start-Sleep -Seconds 2; continue }
         
         if ($confirmSingleInput.Trim().ToLower() -eq 'y') {
             Clear-Host
-            if (Install-Programs -ProgramsToInstall @($programToInstall)) { Write-LogAndHost "$($programToInstall) installation process completed. Perdanga Forever." }
-            else { Write-LogAndHost "Failed to install $($programToInstall). Check log: $(Split-Path -Leaf $script:logFile)" -HostColor Red }
+            if (Install-Programs -ProgramsToInstall @($programToInstall)) { Write-LogAndHost "$($programToInstall) installation process completed." }
+            else { Write-LogAndHost "Failed to install $($programToInstall). Check log for details." -HostColor Red }
             Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
         } else { Write-LogAndHost "Installation of '$($programToInstall)' cancelled." }
     }
+    # Case 4: The input was invalid.
     else {
         Clear-Host
         $validOptions = ($script:mainMenuLetters | Sort-Object | ForEach-Object { $_.ToUpper() }) -join ','
         $errorMessage = "Invalid input: '$userInput'. Use options [$validOptions], program numbers, or a secret word."
-        # Log the full error message, but prefix it for clarity in the log file, avoiding duplication.
-        Write-LogAndHost -Message $errorMessage -LogPrefix "ERROR: " -HostColor Red
+        Write-LogAndHost $errorMessage -HostColor Red -LogPrefix "Main-Loop"
         Start-Sleep -Seconds 2
     }
 } while ($true)
