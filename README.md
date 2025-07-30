@@ -4,7 +4,7 @@
 
 ![Perdanga Forever](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/PSS%201.4.png?raw=true)
 
-> Perdanga Software Solutions is a PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software.
+> Perdanga Software Solutions is a PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software, with enhanced system cleanup and information features.
 
 ## Quick Start
 
@@ -14,7 +14,7 @@
    irm https://raw.githubusercontent.com/perdanger/Perdanga-Software-Solutions/main/PerdangaLoader.ps1 | iex
    ```
 
-2. **[Direct Download the Latest Version](https://github.com/perdanger/Perdanga-Software-Solutions/releases/download/1.4/PSS.1.4.rar)**
+2. **[Direct Download the Latest Version](https://github.com/perdanger/Perdanga-Software-Solutions/releases/download/1.5/PSS.1.5.rar)**
 
 > [!IMPORTANT]  
 > Ensure is run with **Administrator privileges** to avoid execution issues.
@@ -30,23 +30,18 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 ### 1. Main Menu
 
-- **[A] Install All Programs**  
-
-- **[G] Select Specific Programs**  
-
-- **[U] Uninstall Programs**  
-
-- **[C] Install Custom Package**  
-
-- **[T] Disable Windows Telemetry**  
-
-- **[X] Activate Spotify**  
-
-- **[W] Activate Windows**  
-
-- **[N] Update Windows**  
-
-- **[F] Create Unattend.xml File**
+- **[A] Install All Programs**: Installs all supported programs.
+- **[G] Select Specific Programs [GUI]**: Choose programs to install via a graphical interface.
+- **[U] Uninstall Programs [GUI]**: Uninstall programs via a graphical interface.
+- **[C] Install Custom Package**: Install a specific Chocolatey package by ID.
+- **[T] Disable Windows Telemetry**: Disables telemetry services and registry keys.
+- **[X] Activate Spotify**: Applies SpotX modifications to Spotify.
+- **[W] Activate Windows**: Uses an external script for Windows activation.
+- **[N] Update Windows**: Installs Windows updates using PSWindowsUpdate.
+- **[F] Create Unattend.xml File [GUI]**: Creates a customized Windows installation file.
+- **[S] System Cleanup [GUI]**: Cleans temporary files, NVIDIA cache, and more.
+- **[P] Import & Install from File**: Installs programs from a JSON file.
+- **[I] Show System Information**: Displays detailed system info, including CPU, RAM, disk, network, and video card.
 
 > [!TIP]  
 > To install specific programs, enter their numbers (e.g., `1 5 17`, or `1,5,17`) from the supported programs list.  
@@ -63,24 +58,29 @@ Customize your Windows installation with these options:
 - **Bloatware Removal**: Remove unwanted pre-installed apps during setup.
 - **Output**: Saves the `autounattend.xml` file to your Desktop for use with a Windows installation USB.
 
+
+### 3. Import & Install from File [P]
+
+Imports a JSON file containing a list of program names to install:
+
+- Select a `.json` file from your Desktop.
+- Validates and installs the listed programs.
+- Example JSON format: `["7zip.install", "brave", "vlc"]`.
+
 ## 🛠️ Troubleshooting
 
 - **Script Fails to Run**:
-
   - Ensure PowerShell is run with **Administrator privileges**.
   - Verify PowerShell version (5.1 or higher): `Get-Host | Select-Object Version` or `$PSVersionTable.PSVersion`.
   - Check your execution policy: `Get-ExecutionPolicy`. If restricted, set it to `RemoteSigned` with `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`.
 
 - **GUI Unavailable**:
-
-  - If `[G]`, `[U]`, or `[F]` options fail, ensure `System.Windows.Forms` is available. Alternatively, use CLI-based options.
+  - If `[G]`, `[U]`, `[F]`, or `[S]` options fail, ensure `System.Windows.Forms` is available. Alternatively, use CLI-based options.
 
 - **Package Not Found**:
-
   - For `[C]`, confirm the package ID exists in the Chocolatey repository: `choco search <id>`.
 
 - **Logs**:
-
   - Review `install_log_YYYYMMDD_HHMMSS.txt` in the script directory or `%TEMP%` folder for detailed error information.
 
 ## 📜 Credits
