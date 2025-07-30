@@ -1,6 +1,6 @@
 # Perdanga Software Solutions
 
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue) ![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green) ![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue) ![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green) ![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown) ![PowerShell](https://img.shields.io/badge/Powered%20by-PowerShell-blue)
 
 ![Perdanga Forever](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/PSS1.5.png?raw=true)
 
