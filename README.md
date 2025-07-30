@@ -30,18 +30,18 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 ### 1. Main Menu
 
-- **[A] Install All Programs**: Installs all supported programs.
-- **[G] Select Specific Programs [GUI]**: Choose programs to install via a graphical interface.
-- **[U] Uninstall Programs [GUI]**: Uninstall programs via a graphical interface.
-- **[C] Install Custom Package**: Install a specific Chocolatey package by ID.
-- **[T] Disable Windows Telemetry**: Disables telemetry services and registry keys.
-- **[X] Activate Spotify**: Applies SpotX modifications to Spotify.
-- **[W] Activate Windows**: Uses an external script for Windows activation.
-- **[N] Update Windows**: Installs Windows updates using PSWindowsUpdate.
-- **[F] Create Unattend.xml File [GUI]**: Creates a customized Windows installation file.
-- **[S] System Cleanup [GUI]**: Cleans temporary files, NVIDIA cache, and more.
-- **[P] Import & Install from File**: Installs programs from a JSON file.
-- **[I] Show System Information**: Displays detailed system info, including CPU, RAM, disk, network, and video card.
+- **[A] Install All Programs**
+- **[G] Select Specific Programs [GUI]**
+- **[U] Uninstall Programs [GUI]**
+- **[C] Install Custom Package**
+- **[T] Disable Windows Telemetry**
+- **[X] Activate Spotify**
+- **[W] Activate Windows**
+- **[N] Update Windows**
+- **[F] Create Unattend.xml File [GUI]**
+- **[S] System Cleanup [GUI]**
+- **[P] Import & Install from File**
+- **[I] Show System Information**
 
 > [!TIP]  
 > To install specific programs, enter their numbers (e.g., `1 5 17`, or `1,5,17`) from the supported programs list.  
