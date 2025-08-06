@@ -1,11 +1,12 @@
 <#
 .SYNOPSIS
     Author: Roman Zhdanov
-    Version: 1.5
-    Last Modified: 28.07.2025
+    Version: 1.6
+    Last Modified: 06.08.2025
 .DESCRIPTION
     Perdanga Software Solutions is a PowerShell script designed to simplify the installation, 
-    uninstallation, and management of essential Windows software.
+    uninstallation, and management of essential Windows software. Includes dynamic application
+    cache cleaning.
 
 DISCLAIMER: This script contains features that download and execute third-party scripts. 
 (https://github.com/SpotX-Official/SpotX)
@@ -333,7 +334,7 @@ function Invoke-DisableTelemetry {
     $null = Read-Host
 }
 
-# ENHANCED FUNCTION (v1.5): Displays key system information, including Video Card.
+# ENHANCED FUNCTION: Displays key system information, including Video Card.
 function Show-SystemInfo {
     Write-LogAndHost "Gathering system information..." -HostColor Cyan -LogPrefix "Show-SystemInfo"
     $infoOutput = New-Object System.Collections.Generic.List[string]
@@ -347,16 +348,90 @@ function Show-SystemInfo {
         $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
         $infoOutput.Add(" OS Name: $($osInfo.Caption)")
         $infoOutput.Add(" OS Version: $($osInfo.Version)")
+        $infoOutput.Add(" OS Build: $($osInfo.BuildNumber)")
+        $infoOutput.Add(" System Type: $($osInfo.OSArchitecture)") # New: System Type
         
+        # Windows Product ID
+        try {
+            $productID = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").ProductId
+            $infoOutput.Add(" Product ID: $($productID)") # New: Product ID
+        } catch {
+            $infoOutput.Add(" Product ID: N/A (Error retrieving)")
+        }
+
         # CPU Info
         $cpuInfo = Get-CimInstance -ClassName Win32_Processor
         $infoOutput.Add(" Processor: $($cpuInfo.Name.Trim())")
+        $infoOutput.Add(" Cores: $($cpuInfo.NumberOfCores) (Logical: $($cpuInfo.NumberOfLogicalProcessors))")
         
+        # Virtualization Support
+        try {
+            $virtualizationInfo = Get-CimInstance -ClassName Win32_Processor | Select-Object VirtualizationFirmwareEnabled, VMMonitorModeExtensions
+            $virtEnabled = if ($virtualizationInfo.VirtualizationFirmwareEnabled) { "Enabled" } else { "Disabled" }
+            $vmMonitor = if ($virtualizationInfo.VMMonitorModeExtensions) { "Supported" } else { "Not Supported" }
+            $infoOutput.Add(" Virtualization: Firmware $($virtEnabled), VM Monitor $($vmMonitor)") # New: Virtualization
+        } catch {
+            $infoOutput.Add(" Virtualization: N/A (Error retrieving)")
+        }
+
         # RAM Info
         $ramInfo = Get-CimInstance -ClassName Win32_ComputerSystem
         $ramGB = [math]::Round($ramInfo.TotalPhysicalMemory / 1GB, 2)
         $infoOutput.Add(" Installed RAM: $($ramGB) GB")
         
+        $infoOutput.Add($line)
+        $infoOutput.Add(" System Hardware Information") # Consolidated header
+        $infoOutput.Add($line)
+
+        # System Manufacturer and Model
+        try {
+            $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
+            $infoOutput.Add(" Manufacturer: $($computerSystem.Manufacturer)") # New: Manufacturer
+            $infoOutput.Add(" Model: $($computerSystem.Model)") # New: Model
+        } catch {
+            $infoOutput.Add(" Manufacturer/Model: N/A (Error retrieving)")
+        }
+
+        # Motherboard Info
+        $boardInfo = Get-CimInstance -ClassName Win32_BaseBoard
+        if ($boardInfo) {
+            $infoOutput.Add(" Motherboard Manufacturer: $($boardInfo.Manufacturer)")
+            # Removed: $infoOutput.Add(" Motherboard Product: $($boardInfo.Product)")
+            # Removed: $infoOutput.Add(" Motherboard Serial: $($boardInfo.SerialNumber)")
+        } else {
+            $infoOutput.Add(" No motherboard information found.")
+        }
+
+        # BIOS Info
+        $biosInfo = Get-CimInstance -ClassName Win32_BIOS
+        if ($biosInfo) {
+            $infoOutput.Add(" BIOS Version: $($biosInfo.SMBIOSBIOSVersion)")
+            $infoOutput.Add(" BIOS Release Date: $($biosInfo.ReleaseDate)")
+        } else {
+            $infoOutput.Add(" No BIOS information found.")
+        }
+
+        $infoOutput.Add($line)
+        $infoOutput.Add(" Video Card Information") # Moved up
+        $infoOutput.Add($line)
+
+        # Video Card Info
+        $videoControllers = Get-CimInstance -ClassName Win32_VideoController
+        if ($videoControllers) {
+            foreach ($video in $videoControllers) {
+                $infoOutput.Add(" Name: $($video.Name)")
+                if ($video.AdapterRAM) {
+                    # Convert AdapterRAM from bytes to GB and round to 2 decimal places
+                    $adapterRamGB = [math]::Round($video.AdapterRAM / 1GB, 2)
+                    $infoOutput.Add("   Adapter RAM: $($adapterRamGB) GB (Hardware reported)") # Changed to GB
+                }
+                $infoOutput.Add("   Driver Version: $($video.DriverVersion)")
+                $infoOutput.Add("")
+            }
+        } else {
+            $infoOutput.Add(" No video controllers found.")
+        }
+
         $infoOutput.Add($line)
         $infoOutput.Add(" Network Information")
         $infoOutput.Add($line)
@@ -378,41 +453,59 @@ function Show-SystemInfo {
         $infoOutput.Add(" Disk Information")
         $infoOutput.Add($line)
 
-        # Disk Info
+        # Disk Info (FIXED LOGIC)
         $disks = Get-CimInstance -ClassName Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }
         if ($disks) {
-             foreach ($disk in $disks) {
+            foreach ($disk in $disks) {
                 $sizeGB = [math]::Round($disk.Size / 1GB, 2)
                 $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
                 $percentFree = [math]::Round(($disk.FreeSpace / $disk.Size) * 100, 2)
                 $infoOutput.Add(" Drive: $($disk.DeviceID)")
                 $infoOutput.Add("   Size: $($sizeGB) GB")
                 $infoOutput.Add("   Free Space: $($freeGB) GB ($($percentFree)%)")
+
+                # New, robust method to find the physical disk
+                $partition = Get-CimAssociatedInstance -InputObject $disk -ResultClassName Win32_DiskPartition
+                if ($partition) {
+                    $physicalDisk = Get-CimAssociatedInstance -InputObject $partition -ResultClassName Win32_DiskDrive
+                    if ($physicalDisk) {
+                        $diskType = "Unknown"
+                        # MediaType: 3 for HDD, 4 for SSD, 5 for SCM/NVMe
+                        switch ($physicalDisk.MediaType) {
+                            3 { $diskType = "HDD" }
+                            4 { $diskType = "SSD" }
+                            5 { $diskType = "SCM" } # Storage Class Memory, often NVMe
+                        }
+                        # Removed: $infoOutput.Add("   Disk Type: $($diskType)")
+                        $infoOutput.Add("   Model: $($physicalDisk.Model)")
+                    } else {
+                        # Removed: $infoOutput.Add("   Disk Type: N/A (Could not find associated physical disk)")
+                    }
+                } else {
+                    # Removed: $infoOutput.Add("   Disk Type: N/A (Could not find associated partition)")
+                }
                 $infoOutput.Add("")
             }
         } else {
-             $infoOutput.Add(" No fixed logical disks found.")
+            $infoOutput.Add(" No fixed logical disks found.")
         }
         
         $infoOutput.Add($line)
-        $infoOutput.Add(" Video Card Information")
+        $infoOutput.Add(" Logged-on User(s)")
         $infoOutput.Add($line)
 
-        # Video Card Info
-        $videoControllers = Get-CimInstance -ClassName Win32_VideoController
-        if ($videoControllers) {
-            foreach ($video in $videoControllers) {
-                $infoOutput.Add(" Name: $($video.Name)")
-                if ($video.AdapterRAM) {
-                    $adapterRamMB = [math]::Round($video.AdapterRAM / 1MB)
-                    $infoOutput.Add("   Adapter RAM: $($adapterRamMB) MB")
-                }
-                $infoOutput.Add("   Driver Version: $($video.DriverVersion)")
-                $infoOutput.Add("")
+        # Logged-on User(s)
+        try {
+            $loggedOnUsers = Get-CimInstance -ClassName Win32_ComputerSystem | Select-Object -ExpandProperty UserName
+            if ($loggedOnUsers) {
+                $infoOutput.Add(" User: $($loggedOnUsers)")
+            } else {
+                $infoOutput.Add(" No user logged on or unable to retrieve information.")
             }
-        } else {
-            $infoOutput.Add(" No video controllers found.")
+        } catch {
+            $infoOutput.Add(" Could not retrieve logged-on user information. Error: $($_.Exception.Message)")
         }
+
     }
     catch {
         Write-LogAndHost "Failed to gather some system information. Error: $($_.Exception.Message)" -HostColor Red -LogPrefix "Show-SystemInfo"
@@ -429,6 +522,7 @@ function Show-SystemInfo {
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
     $null = Read-Host
 }
+
 
 # NEW FUNCTION (v1.5): Imports a list of programs from a file and installs them.
 function Import-ProgramSelection {
@@ -509,7 +603,195 @@ function Import-ProgramSelection {
     $null = Read-Host
 }
 
-# FUNCTION: Clean temporary system files with a GUI.
+# ENHANCED FUNCTION: Dynamically finds potential cache folders for installed applications, including a list of well-known ones and installed browsers.
+function Find-DynamicAppCaches {
+    Write-LogAndHost "Scanning for application caches..." -NoHost -LogPrefix "Find-DynamicAppCaches"
+    
+    $discoveredCaches = [ordered]@{}
+    $processedApps = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
+
+    # --- Start with a list of well-known application caches ---
+    $wellKnownApps = [ordered]@{
+        "NVIDIA Cache"             = @("$env:LOCALAPPDATA\NVIDIA\GLCache", "$env:ProgramData\NVIDIA Corporation\Downloader");
+        "DirectX Shader Cache"     = @("$env:LOCALAPPDATA\D3DSCache");
+        "Steam Cache"              = @("$env:LOCALAPPDATA\Steam\appcache", "$env:LOCALAPPDATA\Steam\htmlcache");
+        "Discord Cache"            = @("$env:APPDATA\discord\Cache", "$env:APPDATA\discord\Code Cache", "$env:APPDATA\discord\GPUCache");
+        "EA App Cache"             = @("$env:LOCALAPPDATA\Electronic Arts\EA Desktop\cache");
+        "Spotify Cache"            = @("$env:LOCALAPPDATA\Spotify\Storage", "$env:LOCALAPPDATA\Spotify\Browser");
+        "Visual Studio Code Cache" = @("$env:APPDATA\Code\Cache", "$env:APPDATA\Code\GPUCache", "$env:APPDATA\Code\CachedData");
+        "Slack Cache"              = @("$env:APPDATA\Slack\Cache", "$env:APPDATA\Slack\GPUCache", "$env:APPDATA\Slack\Service Worker\CacheStorage");
+        "Zoom Cache"               = @("$env:APPDATA\Zoom\data\Cache");
+        "Adobe Cache"              = @("$env:LOCALAPPDATA\Adobe\Common\Media Cache Files", "$env:LOCALAPPDATA\Adobe\Common\Media Cache");
+        "Telegram Cache"           = @("$env:APPDATA\Telegram Desktop\tdata\user_data\cache"); # Corrected Telegram Cache path
+    }
+
+    Write-LogAndHost "Checking for well-known application caches..." -NoHost
+    foreach ($appName in $wellKnownApps.Keys) {
+        $existingPaths = $wellKnownApps[$appName] | ForEach-Object { Resolve-Path $_ -ErrorAction SilentlyContinue } | Select-Object -ExpandProperty Path
+        if ($existingPaths) {
+            Write-LogAndHost "Found existing well-known cache for '$appName'." -NoHost
+            $discoveredCaches[$appName] = @{ Paths = $existingPaths; Type = 'Folder' }
+            [void]$processedApps.Add($appName)
+        }
+    }
+
+    # --- Dynamically find installed web browser caches ---
+    Write-LogAndHost "Scanning for installed web browser caches..." -NoHost
+    $browserCacheConfigs = [ordered]@{
+        "Google Chrome" = @{
+            InstallPaths = @(
+                "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+                "$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe"
+            );
+            CacheDirs = @(
+                "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache",
+                "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Code Cache",
+                "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\GPUCache"
+            )
+        };
+        "Microsoft Edge" = @{
+            InstallPaths = @(
+                "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe"
+            );
+            CacheDirs = @(
+                "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache",
+                "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Code Cache",
+                "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\GPUCache"
+            )
+        };
+        "Brave Browser" = @{
+            InstallPaths = @(
+                "$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\brave.exe",
+                "$env:ProgramFiles(x86)\BraveSoftware\Brave-Browser\Application\brave.exe"
+            );
+            CacheDirs = @(
+                "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\Cache",
+                "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\Code Cache",
+                "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\GPUCache"
+            )
+        };
+        "Opera Browser" = @{
+            InstallPaths = @(
+                "$env:ProgramFiles\Opera\launcher.exe",
+                "$env:ProgramFiles(x86)\Opera\launcher.exe"
+            );
+            CacheDirs = @(
+                "$env:LOCALAPPDATA\Opera Software\Opera Stable\Cache",
+                "$env:LOCALAPPDATA\Opera Software\Opera Stable\Code Cache",
+                "$env:LOCALAPPDATA\Opera Software\Opera Stable\GPUCache"
+            )
+        };
+        "Vivaldi Browser" = @{
+            InstallPaths = @(
+                "$env:ProgramFiles\Vivaldi\Application\vivaldi.exe",
+                "$env:ProgramFiles(x86)\Vivaldi\Application\vivaldi.exe"
+            );
+            CacheDirs = @(
+                "$env:LOCALAPPDATA\Vivaldi\User Data\Default\Cache",
+                "$env:LOCALAPPDATA\Vivaldi\User Data\Default\Code Cache",
+                "$env:LOCALAPPDATA\Vivaldi\User Data\Default\GPUCache"
+            )
+        };
+        "Mozilla Firefox" = @{
+            InstallPaths = @(
+                "$env:ProgramFiles\Mozilla Firefox\firefox.exe",
+                "$env:ProgramFiles(x86)\Mozilla Firefox\firefox.exe"
+            );
+            CacheDirs = @() # Populated dynamically below for profiles
+        }
+    }
+
+    foreach ($browserName in $browserCacheConfigs.Keys) {
+        $config = $browserCacheConfigs[$browserName]
+        $isBrowserInstalled = $false
+        foreach ($installPath in $config.InstallPaths) {
+            if (Test-Path $installPath) {
+                $isBrowserInstalled = $true
+                break
+            }
+        }
+
+        if ($isBrowserInstalled) {
+            $foundBrowserPaths = New-Object System.Collections.Generic.List[string]
+            if ($browserName -eq "Mozilla Firefox") {
+                # Special handling for Firefox profiles
+                $ffProfileDirs = Get-ChildItem -Path "$env:APPDATA\Mozilla\Firefox\Profiles" -Directory -ErrorAction SilentlyContinue
+                if ($ffProfileDirs) {
+                    $ffProfileDirs | ForEach-Object {
+                        $cachePath = Join-Path $_.FullName "cache2"
+                        if (Test-Path $cachePath) { [void]$foundBrowserPaths.Add($cachePath) }
+                    }
+                }
+            } else {
+                # For Chromium-based browsers
+                foreach ($cacheDir in $config.CacheDirs) {
+                    $resolvedPath = Resolve-Path $cacheDir -ErrorAction SilentlyContinue
+                    if ($resolvedPath) { [void]$foundBrowserPaths.Add($resolvedPath.Path) }
+                }
+            }
+
+            if ($foundBrowserPaths.Count -gt 0) {
+                $uniquePaths = $foundBrowserPaths | Select-Object -Unique
+                Write-LogAndHost "Found cache for installed browser '$browserName': $($uniquePaths -join ', ')" -NoHost
+                $discoveredCaches[$browserName + " Cache"] = @{ Paths = $uniquePaths; Type = 'Folder' }
+                [void]$processedApps.Add($browserName)
+            }
+        }
+    }
+
+
+    # --- Now, scan the registry for other installed applications ---
+    Write-LogAndHost "Scanning registry for other installed applications..." -NoHost
+    $uninstallPaths = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    )
+    $cacheFolderNames = @("Cache", "cache", "Code Cache", "GPUCache", "ShaderCache", "temp", "tmp")
+    $searchRoots = @($env:LOCALAPPDATA, $env:APPDATA, $env:ProgramData)
+
+    foreach ($path in $uninstallPaths) {
+        $regKeys = Get-ChildItem -Path $path -ErrorAction SilentlyContinue
+        if (-not $regKeys) { continue }
+
+        foreach ($key in $regKeys) {
+            $appName = $key.GetValue("DisplayName")
+            $publisher = $key.GetValue("Publisher")
+
+            if ([string]::IsNullOrWhiteSpace($appName) -or $appName -match "^KB[0-9]{6,}$" -or $processedApps.Contains($appName)) { continue }
+            [void]$processedApps.Add($appName)
+
+            $potentialNames = New-Object System.Collections.Generic.List[string]
+            $potentialNames.Add($appName)
+            if (-not [string]::IsNullOrWhiteSpace($publisher)) { $potentialNames.Add($publisher) }
+            
+            $foundPaths = New-Object System.Collections.Generic.List[string]
+
+            foreach ($name in ($potentialNames | Select-Object -Unique)) {
+                foreach ($root in $searchRoots) {
+                    $basePath = Join-Path -Path $root -ChildPath $name
+                    if (Test-Path $basePath) {
+                        foreach ($cacheName in $cacheFolderNames) {
+                            $cachePath = Join-Path -Path $basePath -ChildPath $cacheName
+                            if (Test-Path $cachePath) { $foundPaths.Add($cachePath) }
+                        }
+                    }
+                }
+            }
+            
+            if ($foundPaths.Count -gt 0) {
+                $uniquePaths = $foundPaths | Select-Object -Unique
+                Write-LogAndHost "Found potential cache for '$appName': $($uniquePaths -join ', ')" -NoHost
+                $discoveredCaches[$appName] = @{ Paths = $uniquePaths; Type = 'Folder' }
+            }
+        }
+    }
+    
+    Write-LogAndHost "Finished cache scan. Found $($discoveredCaches.Count) applications with potential caches." -NoHost
+    return $discoveredCaches
+}
+
+#FUNCTION: Clean temporary system files with a GUI, with consolidated dynamic cache discovery and path tooltips.
 function Invoke-TempFileCleanup {
     if (-not $script:guiAvailable) {
         Write-LogAndHost "GUI is not available, cannot launch the System Cleanup tool." -HostColor Red -LogPrefix "Invoke-TempFileCleanup"
@@ -518,212 +800,221 @@ function Invoke-TempFileCleanup {
     }
     Write-LogAndHost "Launching System Cleanup GUI..." -HostColor Cyan
 
+    # --- DATA STRUCTURE for all cleanup items ---
+    # Removed hardcoded "Web Browser Caches" as Find-DynamicAppCaches will now include them.
+    $cleanupItems = [ordered]@{
+        "System Items" = [ordered]@{
+            "Windows Temporary Files" = @{ Paths = @("$env:TEMP", "$env:windir\Temp"); Type = 'Folder' }
+            "Windows Update Cache"    = @{ Paths = @("$env:windir\SoftwareDistribution\Download"); Type = 'Folder' }
+            "Delivery Optimization"   = @{ Paths = @("$env:windir\SoftwareDistribution\DeliveryOptimization"); Type = 'Folder' }
+            "Windows Log Files"       = @{ Paths = @("$env:windir\Logs"); Type = 'Folder' }
+            "System Minidump Files"   = @{ Paths = @("$env:windir\Minidump"); Type = 'Folder' }
+            "Windows Prefetch Files"  = @{ Paths = @("$env:windir\Prefetch"); Type = 'Folder' }
+            "Thumbnail Cache"         = @{ Path = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"; Filter = "thumbcache_*.db"; Type = 'File' }
+            "Windows Icon Cache"      = @{ Path = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"; Filter = "iconcache_*.db"; Type = 'File' }
+            "Windows Font Cache"      = @{ Paths = @("$env:windir\ServiceProfiles\LocalService\AppData\Local\FontCache"); Type = 'Folder' }
+            "Recycle Bin"             = @{ Type = 'Special' }
+        }
+        "Discovered Application Caches" = [ordered]@{} # Category for all discovered app caches, including browsers.
+    }
+
     # --- GUI Setup ---
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Perdanga System Cleanup"
-    $form.Size = New-Object System.Drawing.Size(600, 550)
-    $form.StartPosition = "CenterScreen"
-    $form.FormBorderStyle = "FixedDialog"
-    $form.MaximizeBox = $false
+    $form.Text = "Perdanga System Cleanup"; $form.Size = New-Object System.Drawing.Size(600, 680)
+    $form.StartPosition = "CenterScreen"; $form.FormBorderStyle = "FixedDialog"; $form.MaximizeBox = $false
     $form.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
 
-    # Common Font and Color scheme for a modern look.
     $commonFont = New-Object System.Drawing.Font("Segoe UI", 10)
-    $labelColor = [System.Drawing.Color]::White
     $controlBackColor = [System.Drawing.Color]::FromArgb(60, 60, 63)
     $controlForeColor = [System.Drawing.Color]::White
-    $groupboxForeColor = [System.Drawing.Color]::Gainsboro
 
-    # Helper functions for creating styled controls to reduce code repetition.
-    function New-StyledCheckBox($Text, $Location, $Checked) {
-        $checkbox = New-Object System.Windows.Forms.CheckBox; $checkbox.Text = $Text; $checkbox.Location = $Location; $checkbox.Font = $commonFont; $checkbox.ForeColor = $labelColor; $checkbox.AutoSize = $true; $checkbox.Checked = $Checked; return $checkbox
-    }
-    function New-StyledGroupBox($Text, $Location, $Size) {
-        $groupbox = New-Object System.Windows.Forms.GroupBox; $groupbox.Text = $Text; $groupbox.Location = $Location; $groupbox.Size = $Size; $groupbox.Font = $commonFont; $groupbox.ForeColor = $groupboxForeColor; return $groupbox
+    # --- ToolTip Setup for displaying paths ---
+    $toolTip = New-Object System.Windows.Forms.ToolTip
+    $toolTip.AutoPopDelay = 20000 # Keep tooltip visible for 20 seconds.
+    $toolTip.InitialDelay = 700   # Show after 0.7 seconds.
+    $toolTip.ReshowDelay = 500
+    $toolTip.UseFading = $true
+    $toolTip.UseAnimation = $true
+
+    # --- TreeView Setup ---
+    $treeView = New-Object System.Windows.Forms.TreeView
+    $treeView.Location = New-Object System.Drawing.Point(15, 15); $treeView.Size = New-Object System.Drawing.Size(560, 400)
+    $treeView.CheckBoxes = $true; $treeView.Font = $commonFont; $treeView.BackColor = $controlBackColor
+    $treeView.ForeColor = $controlForeColor; $treeView.BorderStyle = "FixedSingle"; $treeView.FullRowSelect = $true
+    $treeView.ShowNodeToolTips = $false # We are handling tooltips manually.
+    $form.Controls.Add($treeView) | Out-Null
+
+    # --- Populate TreeView with static items ---
+    foreach ($categoryName in $cleanupItems.Keys) {
+        $parentNode = $treeView.Nodes.Add($categoryName, $categoryName)
+        # Only add child nodes for static categories initially. Dynamic ones are added on form shown.
+        if ($categoryName -ne "Discovered Application Caches") {
+            foreach ($itemName in $cleanupItems[$categoryName].Keys) {
+                $itemConfig = $cleanupItems[$categoryName][$itemName]
+                # Skip items that might have empty paths (e.g., Firefox before dynamic discovery)
+                if ($itemConfig.Type -eq 'Folder' -and $itemConfig.Paths.Count -eq 0) { continue }
+                $childNode = $parentNode.Nodes.Add($itemName, $itemName); $childNode.Tag = $itemConfig
+                # FIXED: Items are now unchecked by default.
+                $childNode.Checked = $false 
+            }
+            # FIXED: Parent nodes are also unchecked by default.
+            $parentNode.Checked = $false; $parentNode.Expand()
+        }
     }
 
-    # --- GroupBox for Cleanup Options ---
-    $groupOptions = New-StyledGroupBox "Select items to clean" "15,15" "560,200"
-    $form.Controls.Add($groupOptions) | Out-Null
-    
-    $yPos = 30
-    $checkWinTemp = New-StyledCheckBox "Windows Temporary Files" "20,$yPos" $true; $groupOptions.Controls.Add($checkWinTemp) | Out-Null; $yPos += 30
-    $checkNvidia = New-StyledCheckBox "NVIDIA Cache Files" "20,$yPos" $true; $groupOptions.Controls.Add($checkNvidia) | Out-Null; $yPos += 30
-    $checkWinUpdate = New-StyledCheckBox "Windows Update Cache" "20,$yPos" $true; $groupOptions.Controls.Add($checkWinUpdate) | Out-Null; $yPos += 30
-    $checkPrefetch = New-StyledCheckBox "Windows Prefetch Files" "20,$yPos" $true; $groupOptions.Controls.Add($checkPrefetch) | Out-Null; $yPos += 30
-    $checkRecycleBin = New-StyledCheckBox "Empty Recycle Bin" "20,$yPos" $true; $groupOptions.Controls.Add($checkRecycleBin) | Out-Null; $yPos += 30
-    
-    # --- GroupBox for Log Output ---
-    $groupLog = New-StyledGroupBox "Log" "15,225" "560,200"
-    $form.Controls.Add($groupLog) | Out-Null
-    
+    # --- Log Box Setup ---
     $logBox = New-Object System.Windows.Forms.RichTextBox
-    $logBox.Location = "15,25"
-    $logBox.Size = "530,160"
-    $logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
-    $logBox.BackColor = $controlBackColor
-    $logBox.ForeColor = $controlForeColor
-    $logBox.ReadOnly = $true
-    $logBox.BorderStyle = "FixedSingle"
-    $logBox.ScrollBars = "Vertical"
-    $groupLog.Controls.Add($logBox) | Out-Null
-
-    # --- Buttons ---
-    $buttonAnalyze = New-Object System.Windows.Forms.Button; $buttonAnalyze.Text = "Analyze"; $buttonAnalyze.Size = "120,30"; $buttonAnalyze.Location = "100,450"; $buttonAnalyze.Font = $commonFont; $buttonAnalyze.ForeColor = [System.Drawing.Color]::White; $buttonAnalyze.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180); $buttonAnalyze.FlatStyle = "Flat"; $buttonAnalyze.FlatAppearance.BorderSize = 0;
-    $buttonClean = New-Object System.Windows.Forms.Button; $buttonClean.Text = "Clean"; $buttonClean.Size = "120,30"; $buttonClean.Location = "235,450"; $buttonClean.Font = $commonFont; $buttonClean.ForeColor = [System.Drawing.Color]::White; $buttonClean.BackColor = [System.Drawing.Color]::FromArgb(200, 70, 70); $buttonClean.FlatStyle = "Flat"; $buttonClean.FlatAppearance.BorderSize = 0;
-    $buttonClose = New-Object System.Windows.Forms.Button; $buttonClose.Text = "Exit"; $buttonClose.Size = "120,30"; $buttonClose.Location = "370,450"; $buttonClose.Font = $commonFont; $buttonClose.ForeColor = [System.Drawing.Color]::White; $buttonClose.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90); $buttonClose.FlatStyle = "Flat"; $buttonClose.FlatAppearance.BorderSize = 0;
+    $logBox.Location = New-Object System.Drawing.Point(15, 425); $logBox.Size = New-Object System.Drawing.Size(560, 150)
+    $logBox.Font = New-Object System.Drawing.Font("Consolas", 9); $logBox.BackColor = $controlBackColor; $logBox.ForeColor = $controlForeColor
+    $logBox.ReadOnly = $true; $logBox.BorderStyle = "FixedSingle"; $logBox.ScrollBars = "Vertical"
+    $form.Controls.Add($logBox) | Out-Null
     
-    $form.Controls.Add($buttonAnalyze) | Out-Null
-    $form.Controls.Add($buttonClean) | Out-Null
-    $form.Controls.Add($buttonClose) | Out-Null
-
-    $buttonClose.add_Click({$form.Close()}) | Out-Null
-
-    # --- Logic ---
-    $totalSize = 0
-    $pathsToClean = @{}
-
-    # Helper scriptblock to add text to the log box with color.
-    $logWriter = {
-        param($Message, $Color = 'White')
-        $logBox.SelectionStart = $logBox.TextLength
-        $logBox.SelectionLength = 0
-        $logBox.SelectionColor = $Color
-        $logBox.AppendText("$(Get-Date -Format 'HH:mm:ss') - $Message`n")
-        $logBox.ScrollToCaret()
+    # --- Button Setup ---
+    $buttonAnalyze = New-Object System.Windows.Forms.Button; $buttonAnalyze.Text = "Analyze"; $buttonAnalyze.Size = "120,30"; $buttonAnalyze.Location = "100,590";
+    $buttonClean = New-Object System.Windows.Forms.Button; $buttonClean.Text = "Clean"; $buttonClean.Size = "120,30"; $buttonClean.Location = "235,590";
+    $buttonClose = New-Object System.Windows.Forms.Button; $buttonClose.Text = "Exit"; $buttonClose.Size = "120,30"; $buttonClose.Location = "370,590";
+    @( $buttonAnalyze, $buttonClean, $buttonClose ) | ForEach-Object {
+        $_.Font = $commonFont; $_.ForeColor = [System.Drawing.Color]::White; $_.FlatStyle = "Flat"; $_.FlatAppearance.BorderSize = 0; $form.Controls.Add($_) | Out-Null
     }
+    $buttonAnalyze.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180); $buttonClean.BackColor = [System.Drawing.Color]::FromArgb(200, 70, 70); $buttonClose.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
     
-    # Analyze button logic: calculates the size of deletable files.
-    $buttonAnalyze.add_Click({
-        $logBox.Clear()
-        & $logWriter "Starting analysis..." 'Cyan'
-        $totalSize = 0
-        $pathsToClean.Clear()
+    # --- Event Handlers & Logic ---
+    $analyzedData = @{}
+    $logWriter = { param($Message, $Color = 'White'); $logBox.SelectionStart = $logBox.TextLength; $logBox.SelectionLength = 0; $logBox.SelectionColor = $Color; $logBox.AppendText("$(Get-Date -Format 'HH:mm:ss') - $Message`n"); $logBox.ScrollToCaret() }
+    $form.Tag = @{ logWriter = $logWriter }
 
-        $calculateSize = {
-            param($path)
-            $size = 0
-            try {
-                if (Test-Path $path -ErrorAction Stop) {
-                    $items = Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue
-                    $size = ($items | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                }
-            } catch {
-                & $logWriter "Could not access path: $path. Error: $($_.Exception.Message)" 'Yellow'
-            }
-            return $size
-        }
+    # --- DYNAMICALLY FIND AND POPULATE APP CACHES (including browsers) ---
+    $form.Add_Shown({
+        $logWriterFunc = $form.Tag.logWriter
+        & $logWriterFunc "Scanning for application caches (this may take a moment)..." 'LightBlue'; $form.Update()
 
-        if ($checkWinTemp.Checked) {
-            $paths = @("$env:TEMP", "$env:windir\Temp")
-            $pathsToClean['Windows Temp'] = $paths
-            foreach($p in $paths) { $totalSize += & $calculateSize $p }
-        }
-        if ($checkNvidia.Checked) {
-            $paths = @("$env:LOCALAPPDATA\NVIDIA\GLCache", "$env:ProgramData\NVIDIA Corporation\Downloader")
-            $pathsToClean['NVIDIA Cache'] = $paths
-            foreach($p in $paths) { $totalSize += & $calculateSize $p }
-        }
-        if ($checkWinUpdate.Checked) {
-            $paths = @("$env:windir\SoftwareDistribution\Download")
-            $pathsToClean['Windows Update Cache'] = $paths
-            foreach($p in $paths) { $totalSize += & $calculateSize $p }
-        }
-        if ($checkPrefetch.Checked) {
-            $paths = @("$env:windir\Prefetch")
-            $pathsToClean['Prefetch'] = $paths
-            $totalSize += & $calculateSize $paths[0]
-        }
-        if ($checkRecycleBin.Checked) {
-            try {
-                # Use the Shell.Application COM object to query the Recycle Bin size.
-                $shell = New-Object -ComObject Shell.Application
-                $recycleBin = $shell.NameSpace(0xA)
-                $items = $recycleBin.Items()
-                $size = ($items | ForEach-Object { $_.Size } | Measure-Object -Sum).Sum
-                if ($size -gt 0) {
-                    $pathsToClean['Recycle Bin'] = $recycleBin # Store the object itself for later.
-                    $totalSize += $size
-                }
-            } catch {
-                & $logWriter "Could not access Recycle Bin. Error: $($_.Exception.Message)" 'Yellow'
+        $dynamicCaches = Find-DynamicAppCaches
+        $discoveredNode = $treeView.Nodes["Discovered Application Caches"]
+
+        if ($dynamicCaches.Count -gt 0) {
+            $treeView.BeginUpdate()
+            foreach ($appName in ($dynamicCaches.Keys | Sort-Object)) {
+                $itemConfig = $dynamicCaches[$appName]
+                $cleanupItems["Discovered Application Caches"][$appName] = $itemConfig
+                $childNode = $discoveredNode.Nodes.Add($appName, $appName)
+                $childNode.Tag = $itemConfig
+                # Discovered items are unchecked by default for safety.
+                $childNode.Checked = $false 
             }
+            $discoveredNode.Expand(); $treeView.EndUpdate()
+            $discoveredNode.Checked = $false 
+            & $logWriterFunc "Scan complete. Found $($dynamicCaches.Count) items. Review and select them for cleaning." 'Green'
+        } else {
+            & $logWriterFunc "No additional application caches were found." 'Gray'
+            # If no dynamic caches, remove the category node entirely to keep the UI clean.
+            $treeView.Nodes.Remove($discoveredNode)
         }
-        
-        $sizeInMB = [math]::Round($totalSize / 1MB, 2)
-        & $logWriter "Analysis complete. Found $sizeInMB MB of files to clean." 'Green'
-        & $logWriter "Press 'Clean' to remove these files." 'Cyan'
     })
 
-    # Clean button logic: performs the actual deletion after confirmation.
-    $buttonClean.add_Click({
-        if ($pathsToClean.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show("Please run an analysis first by clicking the 'Analyze' button.", "Analysis Required", "OK", "Information") | Out-Null
-            return
-        }
-        
-        $confirmResult = [System.Windows.Forms.MessageBox]::Show("Are you sure you want to permanently delete these files? This cannot be undone.", "Confirm Deletion", "YesNo", "Warning")
-        if ($confirmResult -ne 'Yes') {
-            & $logWriter "Cleanup cancelled by user." 'Yellow'
-            return
-        }
-
-        & $logWriter "Starting cleanup..." 'Cyan'
-        $buttonClean.Enabled = $false
-        $buttonAnalyze.Enabled = $false
-        $form.Update()
-
-        $totalDeleted = 0
-        foreach($category in $pathsToClean.Keys) {
-            & $logWriter "Cleaning $category..." 'White'
-            $paths = $pathsToClean[$category]
-            
-            if ($category -eq 'Recycle Bin') {
-                try {
-                    $recycleBinObject = $pathsToClean[$category]
-                    $sizeToDelete = ($recycleBinObject.Items() | ForEach-Object { $_.Size } | Measure-Object -Sum).Sum
-                    $totalDeleted += $sizeToDelete
-                    # Use the built-in cmdlet to empty the recycle bin.
-                    Clear-RecycleBin -Force -ErrorAction Stop
-                    & $logWriter "Recycle Bin emptied successfully." 'Green'
-                } catch {
-                    & $logWriter "Failed to empty Recycle Bin. Error: $($_.Exception.Message)" 'Red'
-                }
+    # --- Tooltip Handler ---
+    $lastHoveredNode = $null
+    $treeView.add_MouseMove({
+        param($sender, $e)
+        $node = $treeView.GetNodeAt($e.X, $e.Y)
+        if ($node -and $node -ne $lastHoveredNode) {
+            $lastHoveredNode = $node
+            $itemConfig = $node.Tag
+            if ($itemConfig -and $itemConfig.ContainsKey("Paths")) {
+                $tooltipText = "Paths to be cleaned:`n" + ($itemConfig.Paths -join "`n")
+                $toolTip.SetToolTip($treeView, $tooltipText)
             } else {
-                foreach($path in $paths) {
-                    try {
-                        $items = Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue
-                        $size = ($items | Measure-Object -Property Length -Sum).Sum
-                        $totalDeleted += $size
-                        Remove-Item -Path "$path\*" -Recurse -Force -ErrorAction SilentlyContinue
-                        & $logWriter "Cleaned path: $path" 'Green'
-                    } catch {
-                        & $logWriter "Failed to clean path: $path. Error: $($_.Exception.Message)" 'Red'
+                $toolTip.SetToolTip($treeView, "")
+            }
+        } elseif (-not $node) {
+            $lastHoveredNode = $null
+            $toolTip.SetToolTip($treeView, "")
+        }
+    })
+
+    # --- Checkbox logic ---
+    $updatingChecks = $false
+    $treeView.add_AfterCheck({
+        param($sender, $e)
+        if ($updatingChecks) { return }
+        $updatingChecks = $true
+        if ($e.Node.Parent -eq $null) {
+            foreach ($childNode in $e.Node.Nodes) { $childNode.Checked = $e.Node.Checked }
+        } else {
+            $parent = $e.Node.Parent
+            $allChecked = $true; $noneChecked = $true
+            foreach ($sibling in $parent.Nodes) { if ($sibling.Checked) { $noneChecked = $false } else { $allChecked = $false } }
+            if ($allChecked) { $parent.Checked = $true } elseif ($noneChecked) { $parent.Checked = $false } else { $parent.Checked = $false }
+        }
+        $updatingChecks = $false
+    })
+
+    # --- Button Click Handlers ---
+    $buttonAnalyze.add_Click({
+        $logBox.Clear(); & $logWriter "Starting analysis..." 'Cyan'; $analyzedData.Clear()
+        $treeView.BeginUpdate()
+        $totalSize = 0
+        
+        foreach ($parentNode in $treeView.Nodes) {
+            $categorySize = 0
+            foreach ($childNode in $parentNode.Nodes) {
+                $itemConfig = $childNode.Tag; $itemSize = 0
+                if ($childNode.Checked) {
+                    switch ($itemConfig.Type) {
+                        'Folder' { foreach ($p in $itemConfig.Paths) { if(Test-Path $p){ $itemSize += (Get-ChildItem $p -Recurse -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum } } }
+                        'File' { if(Test-Path $itemConfig.Path){ $itemSize = (Get-ChildItem $itemConfig.Path -Filter $itemConfig.Filter -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum } }
+                        'Special' { $shell = New-Object -ComObject Shell.Application; $recycleBin = $shell.NameSpace(0xA); $itemSize = ($recycleBin.Items() | ForEach-Object { $_.Size } | Measure-Object -Sum).Sum }
                     }
                 }
+                $analyzedData[$childNode.Name] = $itemSize; $categorySize += $itemSize
+                $baseNodeName = $childNode.Name -replace " \(\d+(\.\d+)? MB\)$"
+                $nodeSizeText = if ($itemSize -gt 0) { " ($([math]::Round($itemSize/1MB, 2)) MB)" } else { "" }
+                $childNode.Text = $baseNodeName + $nodeSizeText
+            }
+            $baseParentName = $parentNode.Name -replace " \(\d+(\.\d+)? MB\)$"
+            $categorySizeText = if ($categorySize -gt 0) { " ($([math]::Round($categorySize/1MB, 2)) MB)" } else { "" }
+            $parentNode.Text = $baseParentName + $categorySizeText
+            $totalSize += $categorySize
+        }
+        $treeView.EndUpdate()
+        $sizeInMB = [math]::Round($totalSize / 1MB, 2)
+        & $logWriter "Analysis complete. Found $sizeInMB MB of files to clean." 'Green'
+    })
+
+    $buttonClean.add_Click({
+        if ($analyzedData.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Please run an analysis first.", "Analysis Required", "OK", "Information") | Out-Null; return }
+        $confirmResult = [System.Windows.Forms.MessageBox]::Show("Are you sure you want to permanently delete these files?", "Confirm Deletion", "YesNo", "Warning")
+        if ($confirmResult -ne 'Yes') { & $logWriter "Cleanup cancelled by user." 'Yellow'; return }
+        & $logWriter "Starting cleanup..." 'Cyan'; $buttonClean.Enabled = $false; $buttonAnalyze.Enabled = $false; $form.Update()
+        $totalDeleted = 0
+
+        foreach ($parentNode in $treeView.Nodes) {
+            foreach ($childNode in $parentNode.Nodes) {
+                if (-not $childNode.Checked -or -not $analyzedData.ContainsKey($childNode.Name) -or $analyzedData[$childNode.Name] -eq 0) { continue }
+                $baseNodeName = $childNode.Name -replace " \(\d+(\.\d+)? MB\)$"
+                & $logWriter "Cleaning $($baseNodeName)..." 'White'
+                $itemConfig = $childNode.Tag
+                try {
+                    switch ($itemConfig.Type) {
+                        'Folder' { foreach ($p in $itemConfig.Paths) { if (Test-Path $p) { Remove-Item -Path "$p\*" -Recurse -Force -EA SilentlyContinue } } }
+                        'File' { if (Test-Path $itemConfig.Path) { Remove-Item -Path (Join-Path $itemConfig.Path $itemConfig.Filter) -Force -EA SilentlyContinue } }
+                        'Special' { Clear-RecycleBin -Force -ErrorAction Stop }
+                    }
+                    $totalDeleted += $analyzedData[$baseNodeName]
+                } catch { & $logWriter "Failed to clean $($baseNodeName). Error: $($_.Exception.Message)" 'Red' }
             }
         }
         
         $deletedInMB = [math]::Round($totalDeleted / 1MB, 2)
         & $logWriter "Cleanup complete. Freed approximately $deletedInMB MB of space." 'Green'
-        $pathsToClean.Clear()
-        $buttonClean.Enabled = $true
-        $buttonAnalyze.Enabled = $true
+        & $logWriter "Perdanga Forever!" 'Magenta' # Added this line
+        $analyzedData.Clear(); $buttonClean.Enabled = $true; $buttonAnalyze.Enabled = true # Corrected 'true'
+        foreach ($node in $treeView.Nodes) { $node.Text = $node.Name -replace " \(\d+(\.\d+)? MB\)$"; foreach($child in $node.Nodes) { $child.Text = $child.Name -replace " \(\d+(\.\d+)? MB\)$" } }
     })
 
-    # Show the form and dispose of it when closed.
-    try {
-        $null = $form.ShowDialog()
-    }
-    catch {
-        Write-LogAndHost "An unexpected error occurred with the System Cleanup GUI. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-TempFileCleanup"
-    }
-    finally {
-        $form.Dispose()
-    }
-    
-    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
-    $null = Read-Host
+    $buttonClose.add_Click({ $form.Close() }) | Out-Null
+
+    try { $null = $form.ShowDialog() } catch { Write-LogAndHost "An unexpected error occurred with the System Cleanup GUI. Details: $($_.Exception.Message)" -HostColor Red } finally { $form.Dispose() }
+    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
 }
 
 # ENHANCED FUNCTION: Create a detailed autounattend.xml file via GUI with regional settings and tooltips.
@@ -1465,7 +1756,7 @@ function Show-Menu {
     $menuLines.Add($pssUnderline)
     $menuLines.Add($centeredPssTextLine)
     $menuLines.Add($dashedLine)
-    $menuLines.Add(" Windows & Software Manager [PSS v1.5] ($(Get-Date -Format "dd.MM.yyyy HH:mm"))") 
+    $menuLines.Add(" Windows & Software Manager [PSS v1.6] ($(Get-Date -Format "dd.MM.yyyy HH:mm"))") 
     $menuLines.Add(" Log saved to: $(Split-Path -Leaf $script:logFile)")
     $menuLines.Add(" $($script:sortedPrograms.Count) programs available for installation")
     $menuLines.Add($pssUnderline)
@@ -1722,7 +2013,7 @@ try {
 }
 catch { Write-LogAndHost "Exception occurred while checking Chocolatey. $($_.Exception.Message)" -HostColor Red -LogPrefix "Choco-Init"; exit 1 }
 
-Write-Host ""; Write-LogAndHost "Enabling Chocolatey features for a smoother experience..."
+Write-Host ""; Write-LogAndHost "Perdanga Forever!"
 try {
     # Enable global confirmation to prevent prompts during installations.
     & choco feature enable -n allowGlobalConfirmation 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
