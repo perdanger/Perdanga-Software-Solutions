@@ -109,8 +109,8 @@ function Install-Chocolatey {
                 return $false
             }
         } else {
-            Write-LogAndHost "Chocolatey installation cancelled by user." -HostColor Yellow
-            return $false
+            Write-LogAndHost "Chocolatey installation declined by user. Proceeding without Chocolatey." -HostColor Yellow
+            return $true
         }
     } catch {
         Write-LogAndHost "Could not read user input for Chocolatey installation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Install-Chocolatey"
