@@ -2001,24 +2001,58 @@ catch {
 Write-LogAndHost "Checking Chocolatey installation..."
 try {
     if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
-        if (-not (Install-Chocolatey)) { Write-LogAndHost "Chocolatey is required to proceed. Exiting script." -HostColor Red -LogPrefix "Choco-Init"; exit 1 }
-        if (-not (Get-Command choco -ErrorAction SilentlyContinue)) { Write-LogAndHost "Chocolatey command not found after installation. Please install manually." -HostColor Red -LogPrefix "Choco-Init"; exit 1 }
-        if (-not $env:ChocolateyInstall) { $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey"; Write-LogAndHost "ChocolateyInstall environment variable set to: $env:ChocolateyInstall" -NoHost }
+        if (-not (Install-Chocolatey)) {
+            Write-LogAndHost "Chocolatey is not installed. Proceeding without Chocolatey." -HostColor Yellow -LogPrefix "Choco-Init"
+        } else {
+            if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+                Write-LogAndHost "Chocolatey command not found after installation attempt. Proceeding without Chocolatey." -HostColor Yellow -LogPrefix "Choco-Init"
+            } else {
+                if (-not $env:ChocolateyInstall) {
+                    $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey"
+                    Write-LogAndHost "ChocolateyInstall environment variable set to: $env:ChocolateyInstall" -NoHost
+                }
+                $chocoVersion = & choco --version 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-LogAndHost "Chocolatey is not functioning correctly. Exit code: $LASTEXITCODE. Proceeding without Chocolatey." -HostColor Yellow -LogPrefix "Choco-Init"
+                } else {
+                    Write-LogAndHost "Found Chocolatey version: $($chocoVersion -join ' ')"
+                }
+            }
+        }
     } else {
-         if (-not $env:ChocolateyInstall) { $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey"; Write-LogAndHost "ChocolateyInstall environment variable set to: $env:ChocolateyInstall" -NoHost }
+        if (-not $env:ChocolateyInstall) {
+            $env:ChocolateyInstall = "$($env:ProgramData)\chocolatey"
+            Write-LogAndHost "ChocolateyInstall environment variable set to: $env:ChocolateyInstall" -NoHost
+        }
+        $chocoVersion = & choco --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-LogAndHost "Chocolatey is not functioning correctly. Exit code: $LASTEXITCODE. Proceeding without Chocolatey." -HostColor Yellow -LogPrefix "Choco-Init"
+        } else {
+            Write-LogAndHost "Found Chocolatey version: $($chocoVersion -join ' ')"
+        }
     }
-    $chocoVersion = & choco --version 2>&1
-    if ($LASTEXITCODE -ne 0) { Write-LogAndHost "Chocolatey is not functioning correctly. Exit code: $LASTEXITCODE" -HostColor Red -LogPrefix "Choco-Init"; exit 1 }
-    Write-LogAndHost "Found Chocolatey version: $($chocoVersion -join ' ')"
 }
-catch { Write-LogAndHost "Exception occurred while checking Chocolatey. $($_.Exception.Message)" -HostColor Red -LogPrefix "Choco-Init"; exit 1 }
+catch {
+    Write-LogAndHost "Exception occurred while checking Chocolatey. $($_.Exception.Message). Proceeding without Chocolatey." -HostColor Yellow -LogPrefix "Choco-Init"
+}
 
 Write-Host ""; Write-LogAndHost "Perdanga Forever!"
 try {
-    # Enable global confirmation to prevent prompts during installations.
-    & choco feature enable -n allowGlobalConfirmation 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
-    if ($LASTEXITCODE -eq 0) { Write-LogAndHost "Automatic confirmation enabled." } else { Write-LogAndHost "Failed to enable automatic confirmation. $($LASTEXITCODE)" -HostColor Yellow -LogPrefix "Choco-Init" }
-} catch { Write-LogAndHost "Exception enabling automatic confirmation. $($_.Exception.Message)" -HostColor Red -LogPrefix "Choco-Init" }
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        # Enable global confirmation to prevent prompts during installations.
+        & choco feature enable -n allowGlobalConfirmation 2>&1 | Out-File -FilePath $script:logFile -Append -Encoding UTF8
+        if ($LASTEXITCODE -eq 0) {
+            Write-LogAndHost "Automatic confirmation enabled."
+        } else {
+            Write-LogAndHost "Failed to enable automatic confirmation. $($LASTEXITCODE)" -HostColor Yellow -LogPrefix "Choco-Init"
+        }
+    } else {
+        Write-LogAndHost "Skipping Chocolatey global confirmation setup as Chocolatey is not installed." -HostColor Yellow -LogPrefix "Choco-Init"
+    }
+}
+catch {
+    Write-LogAndHost "Exception enabling automatic confirmation. $($_.Exception.Message). Proceeding without Chocolatey configuration." -HostColor Yellow -LogPrefix "Choco-Init"
+}
 Write-Host ""
 
 # Set a flag to run the menu animation only once per session.
