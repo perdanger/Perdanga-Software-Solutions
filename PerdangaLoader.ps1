@@ -2,7 +2,7 @@
 .SYNOPSIS
     Author: Roman Zhdanov
     Version: 1.6
-    Last Modified: 06.08.2025
+    Last Modified: 11.08.2025
 .DESCRIPTION
     Perdanga Software Solutions is a PowerShell script designed to simplify the installation, 
     uninstallation, and management of essential Windows software. Includes dynamic application
@@ -334,11 +334,11 @@ function Invoke-DisableTelemetry {
     $null = Read-Host
 }
 
-# ENHANCED FUNCTION: Displays key system information, including Video Card.
+# ENHANCED FUNCTION: Displays key system information, with accurate Video Card RAM and detailed memory info.
 function Show-SystemInfo {
     Write-LogAndHost "Gathering system information..." -HostColor Cyan -LogPrefix "Show-SystemInfo"
     $infoOutput = New-Object System.Collections.Generic.List[string]
-    $line = "-" * 60
+    $line = "-" * 70
     $infoOutput.Add($line)
     $infoOutput.Add(" System Information")
     $infoOutput.Add($line)
@@ -349,12 +349,12 @@ function Show-SystemInfo {
         $infoOutput.Add(" OS Name: $($osInfo.Caption)")
         $infoOutput.Add(" OS Version: $($osInfo.Version)")
         $infoOutput.Add(" OS Build: $($osInfo.BuildNumber)")
-        $infoOutput.Add(" System Type: $($osInfo.OSArchitecture)") # New: System Type
+        $infoOutput.Add(" System Type: $($osInfo.OSArchitecture)") 
         
         # Windows Product ID
         try {
             $productID = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").ProductId
-            $infoOutput.Add(" Product ID: $($productID)") # New: Product ID
+            $infoOutput.Add(" Product ID: $($productID)")
         } catch {
             $infoOutput.Add(" Product ID: N/A (Error retrieving)")
         }
@@ -362,32 +362,52 @@ function Show-SystemInfo {
         # CPU Info
         $cpuInfo = Get-CimInstance -ClassName Win32_Processor
         $infoOutput.Add(" Processor: $($cpuInfo.Name.Trim())")
-        $infoOutput.Add(" Cores: $($cpuInfo.NumberOfCores) (Logical: $($cpuInfo.NumberOfLogicalProcessors))")
+        $infoOutput.Add(" Cores: $($cpuInfo.NumberOfCores) (Logical Processors: $($cpuInfo.NumberOfLogicalProcessors))")
         
         # Virtualization Support
         try {
             $virtualizationInfo = Get-CimInstance -ClassName Win32_Processor | Select-Object VirtualizationFirmwareEnabled, VMMonitorModeExtensions
             $virtEnabled = if ($virtualizationInfo.VirtualizationFirmwareEnabled) { "Enabled" } else { "Disabled" }
             $vmMonitor = if ($virtualizationInfo.VMMonitorModeExtensions) { "Supported" } else { "Not Supported" }
-            $infoOutput.Add(" Virtualization: Firmware $($virtEnabled), VM Monitor $($vmMonitor)") # New: Virtualization
+            $infoOutput.Add(" Virtualization: Firmware $($virtEnabled), VM Monitor $($vmMonitor)")
         } catch {
             $infoOutput.Add(" Virtualization: N/A (Error retrieving)")
         }
+
+        $infoOutput.Add($line)
+        $infoOutput.Add(" Memory (RAM) Information")
+        $infoOutput.Add($line)
 
         # RAM Info
         $ramInfo = Get-CimInstance -ClassName Win32_ComputerSystem
         $ramGB = [math]::Round($ramInfo.TotalPhysicalMemory / 1GB, 2)
         $infoOutput.Add(" Installed RAM: $($ramGB) GB")
+
+        # Detailed Memory Stick Info
+        try {
+            $memoryModules = Get-CimInstance -ClassName Win32_PhysicalMemory
+            if ($memoryModules) {
+                $infoOutput.Add(" Memory Modules:")
+                foreach ($module in $memoryModules) {
+                    $speed = $module.ConfiguredClockSpeed
+                    $manufacturer = $module.Manufacturer
+                    $capacityGB = [math]::Round($module.Capacity / 1GB, 2)
+                    $infoOutput.Add("   - Slot: $($module.DeviceLocator), Capacity: $($capacityGB) GB, Speed: $($speed) MHz, Manufacturer: $manufacturer")
+                }
+            }
+        } catch {
+            $infoOutput.Add("   Could not retrieve detailed memory module information.")
+        }
         
         $infoOutput.Add($line)
-        $infoOutput.Add(" System Hardware Information") # Consolidated header
+        $infoOutput.Add(" System Hardware Information")
         $infoOutput.Add($line)
 
         # System Manufacturer and Model
         try {
             $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
-            $infoOutput.Add(" Manufacturer: $($computerSystem.Manufacturer)") # New: Manufacturer
-            $infoOutput.Add(" Model: $($computerSystem.Model)") # New: Model
+            $infoOutput.Add(" Manufacturer: $($computerSystem.Manufacturer)")
+            $infoOutput.Add(" Model: $($computerSystem.Model)")
         } catch {
             $infoOutput.Add(" Manufacturer/Model: N/A (Error retrieving)")
         }
@@ -395,9 +415,7 @@ function Show-SystemInfo {
         # Motherboard Info
         $boardInfo = Get-CimInstance -ClassName Win32_BaseBoard
         if ($boardInfo) {
-            $infoOutput.Add(" Motherboard Manufacturer: $($boardInfo.Manufacturer)")
-            # Removed: $infoOutput.Add(" Motherboard Product: $($boardInfo.Product)")
-            # Removed: $infoOutput.Add(" Motherboard Serial: $($boardInfo.SerialNumber)")
+            $infoOutput.Add(" Motherboard: $($boardInfo.Manufacturer) $($boardInfo.Product)")
         } else {
             $infoOutput.Add(" No motherboard information found.")
         }
@@ -406,25 +424,45 @@ function Show-SystemInfo {
         $biosInfo = Get-CimInstance -ClassName Win32_BIOS
         if ($biosInfo) {
             $infoOutput.Add(" BIOS Version: $($biosInfo.SMBIOSBIOSVersion)")
-            $infoOutput.Add(" BIOS Release Date: $($biosInfo.ReleaseDate)")
         } else {
             $infoOutput.Add(" No BIOS information found.")
         }
 
         $infoOutput.Add($line)
-        $infoOutput.Add(" Video Card Information") # Moved up
+        $infoOutput.Add(" Video Card Information")
         $infoOutput.Add($line)
 
-        # Video Card Info
+        # Video Card Info (ENHANCED LOGIC FOR ACCURATE VRAM)
         $videoControllers = Get-CimInstance -ClassName Win32_VideoController
         if ($videoControllers) {
             foreach ($video in $videoControllers) {
                 $infoOutput.Add(" Name: $($video.Name)")
-                if ($video.AdapterRAM) {
-                    # Convert AdapterRAM from bytes to GB and round to 2 decimal places
-                    $adapterRamGB = [math]::Round($video.AdapterRAM / 1GB, 2)
-                    $infoOutput.Add("   Adapter RAM: $($adapterRamGB) GB (Hardware reported)") # Changed to GB
+
+                # --- New, more accurate method to get VRAM via Registry ---
+                $adapterRamGB = $null
+                $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\"
+                $adapterKeys = Get-ChildItem -Path $regPath -ErrorAction SilentlyContinue
+                if ($adapterKeys) {
+                    $matchingKey = $adapterKeys | ForEach-Object { if (($_.GetValue("DriverDesc") -eq $video.Name) -or ($_.GetValue("Description") -eq $video.Name)) { return $_ } } | Select-Object -First 1
+                    if ($matchingKey) {
+                        $vramBytes = $matchingKey.GetValue("HardwareInformation.qwMemorySize")
+                        if ($vramBytes -and $vramBytes -gt 0) {
+                            $adapterRamGB = [math]::Round($vramBytes / 1GB, 2)
+                        }
+                    }
                 }
+
+                # --- Fallback to original WMI method if registry method fails ---
+                if (-not $adapterRamGB -and $video.AdapterRAM) {
+                    $adapterRamGB = [math]::Round($video.AdapterRAM / 1GB, 2)
+                }
+
+                if ($adapterRamGB) {
+                    $infoOutput.Add("   Adapter RAM: $($adapterRamGB) GB")
+                } else {
+                    $infoOutput.Add("   Adapter RAM: N/A")
+                }
+                
                 $infoOutput.Add("   Driver Version: $($video.DriverVersion)")
                 $infoOutput.Add("")
             }
@@ -443,6 +481,8 @@ function Show-SystemInfo {
                 $infoOutput.Add(" Description: $($adapter.Description)")
                 $infoOutput.Add("   IP Address: $($adapter.IPAddress -join ', ')")
                 $infoOutput.Add("   MAC Address: $($adapter.MACAddress)")
+                $infoOutput.Add("   Default Gateway: $($adapter.DefaultIPGateway -join ', ')")
+                $infoOutput.Add("   DNS Servers: $($adapter.DNSServerSearchOrder -join ', ')")
                 $infoOutput.Add("")
             }
         } else {
@@ -453,41 +493,45 @@ function Show-SystemInfo {
         $infoOutput.Add(" Disk Information")
         $infoOutput.Add($line)
 
-        # Disk Info (FIXED LOGIC)
-        $disks = Get-CimInstance -ClassName Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }
+        # Disk Info
+        $disks = Get-CimInstance -ClassName Win32_DiskDrive
         if ($disks) {
             foreach ($disk in $disks) {
                 $sizeGB = [math]::Round($disk.Size / 1GB, 2)
-                $freeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-                $percentFree = [math]::Round(($disk.FreeSpace / $disk.Size) * 100, 2)
-                $infoOutput.Add(" Drive: $($disk.DeviceID)")
-                $infoOutput.Add("   Size: $($sizeGB) GB")
-                $infoOutput.Add("   Free Space: $($freeGB) GB ($($percentFree)%)")
-
-                # New, robust method to find the physical disk
-                $partition = Get-CimAssociatedInstance -InputObject $disk -ResultClassName Win32_DiskPartition
-                if ($partition) {
-                    $physicalDisk = Get-CimAssociatedInstance -InputObject $partition -ResultClassName Win32_DiskDrive
+                
+                # Get physical disk media type (SSD/HDD)
+                $diskType = "Unknown"
+                try {
+                    # Use the disk's Index (DeviceID) to query the corresponding PhysicalDisk
+                    $physicalDisk = Get-PhysicalDisk -DeviceNumber $disk.Index -ErrorAction SilentlyContinue
                     if ($physicalDisk) {
-                        $diskType = "Unknown"
-                        # MediaType: 3 for HDD, 4 for SSD, 5 for SCM/NVMe
-                        switch ($physicalDisk.MediaType) {
-                            3 { $diskType = "HDD" }
-                            4 { $diskType = "SSD" }
-                            5 { $diskType = "SCM" } # Storage Class Memory, often NVMe
-                        }
-                        # Removed: $infoOutput.Add("   Disk Type: $($diskType)")
-                        $infoOutput.Add("   Model: $($physicalDisk.Model)")
-                    } else {
-                        # Removed: $infoOutput.Add("   Disk Type: N/A (Could not find associated physical disk)")
+                        $diskType = $physicalDisk.MediaType
                     }
-                } else {
-                    # Removed: $infoOutput.Add("   Disk Type: N/A (Could not find associated partition)")
+                } catch {
+                    # This catch block handles cases where Get-PhysicalDisk might not be available or fails.
+                    # $diskType will remain "Unknown".
+                }
+                
+                $infoOutput.Add(" Model: $($disk.Model)")
+                $infoOutput.Add("   Size: $($sizeGB) GB")
+                $infoOutput.Add("   Type: $diskType")
+                $infoOutput.Add("   Interface: $($disk.InterfaceType)")
+
+                $partitions = Get-CimAssociatedInstance -InputObject $disk -ResultClassName Win32_DiskPartition
+                if ($partitions) {
+                    foreach ($partition in $partitions) {
+                        $logicalDisk = Get-CimAssociatedInstance -InputObject $partition -ResultClassName Win32_LogicalDisk
+                        if ($logicalDisk) {
+                            $freeGB = [math]::Round($logicalDisk.FreeSpace / 1GB, 2)
+                            $percentFree = [math]::Round(($logicalDisk.FreeSpace / $logicalDisk.Size) * 100, 2)
+                            $infoOutput.Add("     - Drive $($logicalDisk.DeviceID) Free Space: $($freeGB) GB ($($percentFree)%)")
+                        }
+                    }
                 }
                 $infoOutput.Add("")
             }
         } else {
-            $infoOutput.Add(" No fixed logical disks found.")
+            $infoOutput.Add(" No physical disks found.")
         }
         
         $infoOutput.Add($line)
@@ -522,7 +566,6 @@ function Show-SystemInfo {
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
     $null = Read-Host
 }
-
 
 # NEW FUNCTION (v1.5): Imports a list of programs from a file and installs them.
 function Import-ProgramSelection {
@@ -622,7 +665,7 @@ function Find-DynamicAppCaches {
         "Slack Cache"              = @("$env:APPDATA\Slack\Cache", "$env:APPDATA\Slack\GPUCache", "$env:APPDATA\Slack\Service Worker\CacheStorage");
         "Zoom Cache"               = @("$env:APPDATA\Zoom\data\Cache");
         "Adobe Cache"              = @("$env:LOCALAPPDATA\Adobe\Common\Media Cache Files", "$env:LOCALAPPDATA\Adobe\Common\Media Cache");
-        "Telegram Cache"           = @("$env:APPDATA\Telegram Desktop\tdata\user_data\cache"); # Corrected Telegram Cache path
+        "Telegram Cache"           = @("$env:APPDATA\Telegram Desktop\tdata\user_data\cache");
     }
 
     Write-LogAndHost "Checking for well-known application caches..." -NoHost
@@ -791,7 +834,7 @@ function Find-DynamicAppCaches {
     return $discoveredCaches
 }
 
-#FUNCTION: Clean temporary system files with a GUI, with consolidated dynamic cache discovery and path tooltips.
+# ENHANCED FUNCTION: Clean temporary system files with a GUI, with consolidated dynamic cache discovery and path tooltips.
 function Invoke-TempFileCleanup {
     if (-not $script:guiAvailable) {
         Write-LogAndHost "GUI is not available, cannot launch the System Cleanup tool." -HostColor Red -LogPrefix "Invoke-TempFileCleanup"
@@ -801,7 +844,7 @@ function Invoke-TempFileCleanup {
     Write-LogAndHost "Launching System Cleanup GUI..." -HostColor Cyan
 
     # --- DATA STRUCTURE for all cleanup items ---
-    # Removed hardcoded "Web Browser Caches" as Find-DynamicAppCaches will now include them.
+    # Added DNS Cache and Microsoft Store Cache for more thorough cleaning.
     $cleanupItems = [ordered]@{
         "System Items" = [ordered]@{
             "Windows Temporary Files" = @{ Paths = @("$env:TEMP", "$env:windir\Temp"); Type = 'Folder' }
@@ -813,6 +856,8 @@ function Invoke-TempFileCleanup {
             "Thumbnail Cache"         = @{ Path = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"; Filter = "thumbcache_*.db"; Type = 'File' }
             "Windows Icon Cache"      = @{ Path = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"; Filter = "iconcache_*.db"; Type = 'File' }
             "Windows Font Cache"      = @{ Paths = @("$env:windir\ServiceProfiles\LocalService\AppData\Local\FontCache"); Type = 'Folder' }
+            "Microsoft Store Cache"   = @{ Paths = @("$env:LOCALAPPDATA\Packages\Microsoft.WindowsStore_8wekyb3d8bbwe\LocalCache"); Type = 'Folder' }
+            "DNS Cache"               = @{ Type = 'Special' }
             "Recycle Bin"             = @{ Type = 'Special' }
         }
         "Discovered Application Caches" = [ordered]@{} # Category for all discovered app caches, including browsers.
@@ -820,7 +865,7 @@ function Invoke-TempFileCleanup {
 
     # --- GUI Setup ---
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Perdanga System Cleanup"; $form.Size = New-Object System.Drawing.Size(600, 680)
+    $form.Text = "Perdanga System Cleanup"; $form.Size = New-Object System.Drawing.Size(600, 720) # Increased height for new controls
     $form.StartPosition = "CenterScreen"; $form.FormBorderStyle = "FixedDialog"; $form.MaximizeBox = $false
     $form.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
 
@@ -830,60 +875,65 @@ function Invoke-TempFileCleanup {
 
     # --- ToolTip Setup for displaying paths ---
     $toolTip = New-Object System.Windows.Forms.ToolTip
-    $toolTip.AutoPopDelay = 20000 # Keep tooltip visible for 20 seconds.
-    $toolTip.InitialDelay = 700   # Show after 0.7 seconds.
-    $toolTip.ReshowDelay = 500
-    $toolTip.UseFading = $true
-    $toolTip.UseAnimation = $true
+    $toolTip.AutoPopDelay = 20000; $toolTip.InitialDelay = 700; $toolTip.ReshowDelay = 500
+    $toolTip.UseFading = $true; $toolTip.UseAnimation = $true
 
     # --- TreeView Setup ---
     $treeView = New-Object System.Windows.Forms.TreeView
-    $treeView.Location = New-Object System.Drawing.Point(15, 15); $treeView.Size = New-Object System.Drawing.Size(560, 400)
+    $treeView.Location = New-Object System.Drawing.Point(15, 55); $treeView.Size = New-Object System.Drawing.Size(560, 360) # Repositioned
     $treeView.CheckBoxes = $true; $treeView.Font = $commonFont; $treeView.BackColor = $controlBackColor
     $treeView.ForeColor = $controlForeColor; $treeView.BorderStyle = "FixedSingle"; $treeView.FullRowSelect = $true
-    $treeView.ShowNodeToolTips = $false # We are handling tooltips manually.
+    $treeView.ShowNodeToolTips = $false
     $form.Controls.Add($treeView) | Out-Null
 
     # --- Populate TreeView with static items ---
     foreach ($categoryName in $cleanupItems.Keys) {
         $parentNode = $treeView.Nodes.Add($categoryName, $categoryName)
-        # Only add child nodes for static categories initially. Dynamic ones are added on form shown.
         if ($categoryName -ne "Discovered Application Caches") {
             foreach ($itemName in $cleanupItems[$categoryName].Keys) {
                 $itemConfig = $cleanupItems[$categoryName][$itemName]
-                # Skip items that might have empty paths (e.g., Firefox before dynamic discovery)
                 if ($itemConfig.Type -eq 'Folder' -and $itemConfig.Paths.Count -eq 0) { continue }
                 $childNode = $parentNode.Nodes.Add($itemName, $itemName); $childNode.Tag = $itemConfig
-                # FIXED: Items are now unchecked by default.
                 $childNode.Checked = $false 
             }
-            # FIXED: Parent nodes are also unchecked by default.
             $parentNode.Checked = $false; $parentNode.Expand()
         }
     }
 
     # --- Log Box Setup ---
     $logBox = New-Object System.Windows.Forms.RichTextBox
-    $logBox.Location = New-Object System.Drawing.Point(15, 425); $logBox.Size = New-Object System.Drawing.Size(560, 150)
+    $logBox.Location = New-Object System.Drawing.Point(15, 455); $logBox.Size = New-Object System.Drawing.Size(560, 150) # Repositioned
     $logBox.Font = New-Object System.Drawing.Font("Consolas", 9); $logBox.BackColor = $controlBackColor; $logBox.ForeColor = $controlForeColor
     $logBox.ReadOnly = $true; $logBox.BorderStyle = "FixedSingle"; $logBox.ScrollBars = "Vertical"
     $form.Controls.Add($logBox) | Out-Null
     
+    # --- Progress Bar Setup ---
+    $progressBar = New-Object System.Windows.Forms.ProgressBar
+    $progressBar.Location = New-Object System.Drawing.Point(15, 425); $progressBar.Size = New-Object System.Drawing.Size(560, 20) # Repositioned
+    $progressBar.Visible = $false
+    $form.Controls.Add($progressBar) | Out-Null
+
     # --- Button Setup ---
-    $buttonAnalyze = New-Object System.Windows.Forms.Button; $buttonAnalyze.Text = "Analyze"; $buttonAnalyze.Size = "120,30"; $buttonAnalyze.Location = "100,590";
-    $buttonClean = New-Object System.Windows.Forms.Button; $buttonClean.Text = "Clean"; $buttonClean.Size = "120,30"; $buttonClean.Location = "235,590";
-    $buttonClose = New-Object System.Windows.Forms.Button; $buttonClose.Text = "Exit"; $buttonClose.Size = "120,30"; $buttonClose.Location = "370,590";
-    @( $buttonAnalyze, $buttonClean, $buttonClose ) | ForEach-Object {
+    $buttonAnalyze = New-Object System.Windows.Forms.Button; $buttonAnalyze.Text = "Analyze"; $buttonAnalyze.Size = "120,30"; $buttonAnalyze.Location = "100,625"; # Repositioned
+    $buttonClean = New-Object System.Windows.Forms.Button; $buttonClean.Text = "Clean"; $buttonClean.Size = "120,30"; $buttonClean.Location = "235,625"; # Repositioned
+    $buttonClose = New-Object System.Windows.Forms.Button; $buttonClose.Text = "Exit"; $buttonClose.Size = "120,30"; $buttonClose.Location = "370,625"; # Repositioned
+    
+    # --- Select/Deselect All Buttons ---
+    $buttonSelectAll = New-Object System.Windows.Forms.Button; $buttonSelectAll.Text = "Select All"; $buttonSelectAll.Size = "120,30"; $buttonSelectAll.Location = "15,15";
+    $buttonDeselectAll = New-Object System.Windows.Forms.Button; $buttonDeselectAll.Text = "Deselect All"; $buttonDeselectAll.Size = "120,30"; $buttonDeselectAll.Location = "145,15";
+    
+    @( $buttonAnalyze, $buttonClean, $buttonClose, $buttonSelectAll, $buttonDeselectAll ) | ForEach-Object {
         $_.Font = $commonFont; $_.ForeColor = [System.Drawing.Color]::White; $_.FlatStyle = "Flat"; $_.FlatAppearance.BorderSize = 0; $form.Controls.Add($_) | Out-Null
     }
     $buttonAnalyze.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180); $buttonClean.BackColor = [System.Drawing.Color]::FromArgb(200, 70, 70); $buttonClose.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
+    $buttonSelectAll.BackColor = [System.Drawing.Color]::FromArgb(80, 150, 80); $buttonDeselectAll.BackColor = [System.Drawing.Color]::FromArgb(150, 80, 80)
     
     # --- Event Handlers & Logic ---
     $analyzedData = @{}
     $logWriter = { param($Message, $Color = 'White'); $logBox.SelectionStart = $logBox.TextLength; $logBox.SelectionLength = 0; $logBox.SelectionColor = $Color; $logBox.AppendText("$(Get-Date -Format 'HH:mm:ss') - $Message`n"); $logBox.ScrollToCaret() }
     $form.Tag = @{ logWriter = $logWriter }
 
-    # --- DYNAMICALLY FIND AND POPULATE APP CACHES (including browsers) ---
+    # --- DYNAMICALLY FIND AND POPULATE APP CACHES ---
     $form.Add_Shown({
         $logWriterFunc = $form.Tag.logWriter
         & $logWriterFunc "Scanning for application caches (this may take a moment)..." 'LightBlue'; $form.Update()
@@ -898,7 +948,6 @@ function Invoke-TempFileCleanup {
                 $cleanupItems["Discovered Application Caches"][$appName] = $itemConfig
                 $childNode = $discoveredNode.Nodes.Add($appName, $appName)
                 $childNode.Tag = $itemConfig
-                # Discovered items are unchecked by default for safety.
                 $childNode.Checked = $false 
             }
             $discoveredNode.Expand(); $treeView.EndUpdate()
@@ -906,8 +955,12 @@ function Invoke-TempFileCleanup {
             & $logWriterFunc "Scan complete. Found $($dynamicCaches.Count) items. Review and select them for cleaning." 'Green'
         } else {
             & $logWriterFunc "No additional application caches were found." 'Gray'
-            # If no dynamic caches, remove the category node entirely to keep the UI clean.
             $treeView.Nodes.Remove($discoveredNode)
+        }
+        # FIX: Ensure the view is scrolled to the top after loading.
+        if ($treeView.Nodes.Count -gt 0) {
+            $treeView.SelectedNode = $treeView.Nodes[0]
+            $treeView.Nodes[0].EnsureVisible()
         }
     })
 
@@ -937,78 +990,113 @@ function Invoke-TempFileCleanup {
         param($sender, $e)
         if ($updatingChecks) { return }
         $updatingChecks = $true
-        if ($e.Node.Parent -eq $null) {
-            foreach ($childNode in $e.Node.Nodes) { $childNode.Checked = $e.Node.Checked }
-        } else {
-            $parent = $e.Node.Parent
-            $allChecked = $true; $noneChecked = $true
-            foreach ($sibling in $parent.Nodes) { if ($sibling.Checked) { $noneChecked = $false } else { $allChecked = $false } }
-            if ($allChecked) { $parent.Checked = $true } elseif ($noneChecked) { $parent.Checked = $false } else { $parent.Checked = $false }
+        try {
+            if ($e.Node.Parent -eq $null) { # Parent node was clicked
+                foreach ($childNode in $e.Node.Nodes) { $childNode.Checked = $e.Node.Checked }
+            } else { # Child node was clicked
+                $parent = $e.Node.Parent
+                $allChecked = $true; $noneChecked = $true
+                foreach ($sibling in $parent.Nodes) { if ($sibling.Checked) { $noneChecked = $false } else { $allChecked = $false } }
+                if ($allChecked) { $parent.Checked = $true } elseif ($noneChecked) { $parent.Checked = $false } else { $parent.Checked = $false }
+            }
+        } finally {
+            $updatingChecks = $false
         }
-        $updatingChecks = $false
     })
 
     # --- Button Click Handlers ---
+    $buttonSelectAll.add_Click({ foreach ($node in $treeView.Nodes) { $node.Checked = $true } }) | Out-Null
+    $buttonDeselectAll.add_Click({ foreach ($node in $treeView.Nodes) { $node.Checked = $false } }) | Out-Null
+
     $buttonAnalyze.add_Click({
         $logBox.Clear(); & $logWriter "Starting analysis..." 'Cyan'; $analyzedData.Clear()
+        $progressBar.Value = 0; $progressBar.Visible = $true; $form.Update()
+        
+        $nodesToAnalyze = @()
+        foreach ($parentNode in $treeView.Nodes) {
+            foreach ($childNode in $parentNode.Nodes) {
+                if ($childNode.Checked) { $nodesToAnalyze += $childNode }
+            }
+        }
+        if ($nodesToAnalyze.Count -eq 0) { & $logWriter "No items selected for analysis." 'Yellow'; $progressBar.Visible = $false; return }
+
+        $progressBar.Maximum = $nodesToAnalyze.Count
         $treeView.BeginUpdate()
         $totalSize = 0
         
-        foreach ($parentNode in $treeView.Nodes) {
-            $categorySize = 0
-            foreach ($childNode in $parentNode.Nodes) {
-                $itemConfig = $childNode.Tag; $itemSize = 0
-                if ($childNode.Checked) {
-                    switch ($itemConfig.Type) {
-                        'Folder' { foreach ($p in $itemConfig.Paths) { if(Test-Path $p){ $itemSize += (Get-ChildItem $p -Recurse -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum } } }
-                        'File' { if(Test-Path $itemConfig.Path){ $itemSize = (Get-ChildItem $itemConfig.Path -Filter $itemConfig.Filter -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum } }
-                        'Special' { $shell = New-Object -ComObject Shell.Application; $recycleBin = $shell.NameSpace(0xA); $itemSize = ($recycleBin.Items() | ForEach-Object { $_.Size } | Measure-Object -Sum).Sum }
+        foreach ($childNode in $nodesToAnalyze) {
+            $itemConfig = $childNode.Tag; $itemSize = 0
+            switch ($itemConfig.Type) {
+                'Folder' { foreach ($p in $itemConfig.Paths) { if(Test-Path $p){ $itemSize += (Get-ChildItem $p -Recurse -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum } } }
+                'File' { if(Test-Path $itemConfig.Path){ $itemSize = (Get-ChildItem $itemConfig.Path -Filter $itemConfig.Filter -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum } }
+                'Special' { 
+                    if ($childNode.Name -eq "Recycle Bin") {
+                        $shell = New-Object -ComObject Shell.Application; $recycleBin = $shell.NameSpace(0xA); $itemSize = ($recycleBin.Items() | ForEach-Object { $_.Size } | Measure-Object -Sum).Sum 
                     }
+                    # Special items like DNS cache have no size to measure.
                 }
-                $analyzedData[$childNode.Name] = $itemSize; $categorySize += $itemSize
-                $baseNodeName = $childNode.Name -replace " \(\d+(\.\d+)? MB\)$"
-                $nodeSizeText = if ($itemSize -gt 0) { " ($([math]::Round($itemSize/1MB, 2)) MB)" } else { "" }
-                $childNode.Text = $baseNodeName + $nodeSizeText
             }
-            $baseParentName = $parentNode.Name -replace " \(\d+(\.\d+)? MB\)$"
-            $categorySizeText = if ($categorySize -gt 0) { " ($([math]::Round($categorySize/1MB, 2)) MB)" } else { "" }
-            $parentNode.Text = $baseParentName + $categorySizeText
-            $totalSize += $categorySize
+            $analyzedData[$childNode.Name] = $itemSize; $totalSize += $itemSize
+            $baseNodeName = $childNode.Name -replace " \(\d+(\.\d+)? (MB|KB)\)$"
+            $nodeSizeText = if ($itemSize -gt 1MB) { " ($([math]::Round($itemSize/1MB, 2)) MB)" } elseif ($itemSize -gt 0) { " ($([math]::Round($itemSize/1KB, 2)) KB)" } else { "" }
+            $childNode.Text = $baseNodeName + $nodeSizeText
+            $progressBar.PerformStep()
         }
         $treeView.EndUpdate()
         $sizeInMB = [math]::Round($totalSize / 1MB, 2)
         & $logWriter "Analysis complete. Found $sizeInMB MB of files to clean." 'Green'
+        $progressBar.Visible = $false
     })
 
     $buttonClean.add_Click({
         if ($analyzedData.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Please run an analysis first.", "Analysis Required", "OK", "Information") | Out-Null; return }
         $confirmResult = [System.Windows.Forms.MessageBox]::Show("Are you sure you want to permanently delete these files?", "Confirm Deletion", "YesNo", "Warning")
         if ($confirmResult -ne 'Yes') { & $logWriter "Cleanup cancelled by user." 'Yellow'; return }
-        & $logWriter "Starting cleanup..." 'Cyan'; $buttonClean.Enabled = $false; $buttonAnalyze.Enabled = $false; $form.Update()
-        $totalDeleted = 0
-
+        
+        & $logWriter "Starting cleanup..." 'Cyan'
+        $progressBar.Value = 0; $progressBar.Visible = $true
+        @( $buttonAnalyze, $buttonClean, $buttonSelectAll, $buttonDeselectAll ) | ForEach-Object { $_.Enabled = $false }; $form.Update()
+        
+        $nodesToClean = @()
         foreach ($parentNode in $treeView.Nodes) {
             foreach ($childNode in $parentNode.Nodes) {
-                if (-not $childNode.Checked -or -not $analyzedData.ContainsKey($childNode.Name) -or $analyzedData[$childNode.Name] -eq 0) { continue }
-                $baseNodeName = $childNode.Name -replace " \(\d+(\.\d+)? MB\)$"
-                & $logWriter "Cleaning $($baseNodeName)..." 'White'
-                $itemConfig = $childNode.Tag
-                try {
-                    switch ($itemConfig.Type) {
-                        'Folder' { foreach ($p in $itemConfig.Paths) { if (Test-Path $p) { Remove-Item -Path "$p\*" -Recurse -Force -EA SilentlyContinue } } }
-                        'File' { if (Test-Path $itemConfig.Path) { Remove-Item -Path (Join-Path $itemConfig.Path $itemConfig.Filter) -Force -EA SilentlyContinue } }
-                        'Special' { Clear-RecycleBin -Force -ErrorAction Stop }
-                    }
-                    $totalDeleted += $analyzedData[$baseNodeName]
-                } catch { & $logWriter "Failed to clean $($baseNodeName). Error: $($_.Exception.Message)" 'Red' }
+                if ($childNode.Checked) { $nodesToClean += $childNode }
             }
+        }
+        $progressBar.Maximum = $nodesToClean.Count
+        $totalDeleted = 0
+
+        foreach ($childNode in $nodesToClean) {
+            $baseNodeName = $childNode.Name -replace " \(\d+(\.\d+)? (MB|KB)\)$"
+            & $logWriter "Cleaning $($baseNodeName)..." 'White'
+            $itemConfig = $childNode.Tag
+            try {
+                switch ($itemConfig.Type) {
+                    'Folder' { foreach ($p in $itemConfig.Paths) { if (Test-Path $p) { Remove-Item -Path "$p\*" -Recurse -Force -EA SilentlyContinue } } }
+                    'File' { if (Test-Path $itemConfig.Path) { Remove-Item -Path (Join-Path $itemConfig.Path $itemConfig.Filter) -Force -EA SilentlyContinue } }
+                    'Special' { 
+                        if ($baseNodeName -eq "Recycle Bin") { Clear-RecycleBin -Force -ErrorAction Stop }
+                        if ($baseNodeName -eq "DNS Cache") { Start-Process -FilePath "ipconfig" -ArgumentList "/flushdns" -WindowStyle Hidden -Wait }
+                    }
+                }
+                if ($analyzedData.ContainsKey($childNode.Name)) {
+                    $totalDeleted += $analyzedData[$childNode.Name]
+                }
+            } catch { & $logWriter "Failed to clean $($baseNodeName). Error: $($_.Exception.Message)" 'Red' }
+            $progressBar.PerformStep()
         }
         
         $deletedInMB = [math]::Round($totalDeleted / 1MB, 2)
         & $logWriter "Cleanup complete. Freed approximately $deletedInMB MB of space." 'Green'
-        & $logWriter "Perdanga Forever!" 'Magenta' # Added this line
-        $analyzedData.Clear(); $buttonClean.Enabled = $true; $buttonAnalyze.Enabled = true # Corrected 'true'
-        foreach ($node in $treeView.Nodes) { $node.Text = $node.Name -replace " \(\d+(\.\d+)? MB\)$"; foreach($child in $node.Nodes) { $child.Text = $child.Name -replace " \(\d+(\.\d+)? MB\)$" } }
+        & $logWriter "Perdanga Forever!" 'Magenta'
+        
+        $analyzedData.Clear(); $progressBar.Visible = $false
+        @( $buttonAnalyze, $buttonClean, $buttonSelectAll, $buttonDeselectAll ) | ForEach-Object { $_.Enabled = $true }
+        
+        foreach ($node in $treeView.Nodes) { 
+            $node.Text = $node.Name -replace " \(\d+(\.\d+)? (MB|KB)\)$"
+            foreach($child in $node.Nodes) { $child.Text = $child.Name -replace " \(\d+(\.\d+)? (MB|KB)\)$" } 
+        }
     })
 
     $buttonClose.add_Click({ $form.Close() }) | Out-Null
@@ -1043,9 +1131,7 @@ function Create-UnattendXml {
 
     # --- ToolTip Setup (for descriptions) ---
     $toolTip = New-Object System.Windows.Forms.ToolTip
-    $toolTip.AutoPopDelay = 10000 # Keep tooltip visible for 10 seconds.
-    $toolTip.InitialDelay = 500   # Show after 0.5 seconds.
-    $toolTip.ReshowDelay = 500
+    $toolTip.AutoPopDelay = 10000; $toolTip.InitialDelay = 500; $toolTip.ReshowDelay = 500
 
     # --- Button Panel ---
     $buttonPanel = New-Object System.Windows.Forms.Panel
@@ -1133,7 +1219,6 @@ function Create-UnattendXml {
     $groupTimeZone.Controls.Add((New-StyledLabel -Text "Search:" -Location "15,$yPos")) | Out-Null; $textTimeZoneSearch = New-StyledTextBox -Location "85,$yPos" -Size "645,20"; $groupTimeZone.Controls.Add($textTimeZoneSearch) | Out-Null; $yPos += 35
     $listTimeZone = New-Object System.Windows.Forms.ListBox; $listTimeZone.Location = "15,$yPos"; $listTimeZone.Size = "715,100"; $listTimeZone.Font = $commonFont; $listTimeZone.BackColor = $controlBackColor; $listTimeZone.ForeColor = $controlForeColor
     
-    # A static list of modern Windows Time Zone IDs for reliability.
     $windows11TimeZoneIds = @(
         "Dateline Standard Time", "UTC-11", "Aleutian Standard Time", "Hawaiian Standard Time", 
         "Marquesas Standard Time", "Alaskan Standard Time", "UTC-09", "Pacific Standard Time (Mexico)", 
@@ -1191,7 +1276,6 @@ function Create-UnattendXml {
     
     if ($null -ne $sortedFormattedTimeZones) { $listTimeZone.Items.AddRange($sortedFormattedTimeZones) | Out-Null }
     
-    # Pre-select the user's current time zone.
     try {
         $currentTimeZoneId = (Get-TimeZone).Id
         $currentFormattedTz = $timeZoneMap.GetEnumerator() | Where-Object { $_.Value -eq $currentTimeZoneId } | Select-Object -First 1 -ExpandProperty Key
@@ -1224,7 +1308,6 @@ function Create-UnattendXml {
     $yPos = 30
     $groupKeyboard.Controls.Add((New-StyledLabel -Text "Search:" -Location "15,$yPos")) | Out-Null; $textKeyboardSearch = New-StyledTextBox -Location "85,$yPos" -Size "645,20"; $groupKeyboard.Controls.Add($textKeyboardSearch) | Out-Null; $yPos += 35
     $listKeyboardLayouts = New-Object System.Windows.Forms.CheckedListBox; $listKeyboardLayouts.Location = "15,$yPos"; $listKeyboardLayouts.Size = "715,110"; $listKeyboardLayouts.Font = $commonFont; $listKeyboardLayouts.BackColor = $controlBackColor; $listKeyboardLayouts.ForeColor = $controlForeColor; $listKeyboardLayouts.CheckOnClick = $true
-    # A map of friendly names to the required unattend.xml format for keyboard layouts.
     $keyboardLayoutData = @{
         "Arabic (101)"="0401:00000401"; "Bulgarian"="0402:00000402"; "Chinese (Traditional) - US Keyboard"="0404:00000404"; "Czech"="0405:00000405"; "Danish"="0406:00000406"; "German"="0407:00000407";
         "Greek"="0408:00000408"; "English (United States)"="0409:00000409"; "Spanish"="040a:0000040a"; "Finnish"="040b:0000040b"; "French"="040c:0000040c"; "Hebrew"="040d:0000040d";
@@ -1248,7 +1331,6 @@ function Create-UnattendXml {
         if ([string]::IsNullOrWhiteSpace($checkedItemsText)) { $labelSelectedKeyboards.Text = "None" } else { $labelSelectedKeyboards.Text = $checkedItemsText }
     }
 
-    # Enforce a maximum of 5 keyboard layouts.
     $listKeyboardLayouts.Add_ItemCheck({
         param($sender, $e)
         $itemName = $sender.Items[$e.Index]
@@ -1272,7 +1354,6 @@ function Create-UnattendXml {
         $filteredLayouts = $sortedKeyboardLayouts | Where-Object { $_.Name -match [regex]::Escape($searchText) }
         if ($null -ne $filteredLayouts) { $listKeyboardLayouts.Items.AddRange($filteredLayouts.Name) | Out-Null }
         
-        # Re-check the items that were previously selected.
         for($i = 0; $i -lt $listKeyboardLayouts.Items.Count; $i++) {
             if ($checkedKeyboardLayoutNames.Contains($listKeyboardLayouts.Items[$i])) {
                 $listKeyboardLayouts.SetItemChecked($i, $true)
@@ -1281,7 +1362,6 @@ function Create-UnattendXml {
         $listKeyboardLayouts.EndUpdate()
     }) | Out-Null
     
-    # Pre-select the user's current keyboard layout.
     try { 
         $currentLayoutId = (Get-WinUserLanguageList)[0].InputMethodTips[0]
         $defaultKeyboardName = ($keyboardLayoutData.GetEnumerator() | Where-Object { $_.Value -eq $currentLayoutId }).Name
@@ -1340,7 +1420,6 @@ function Create-UnattendXml {
     $bloatTablePanel = New-Object System.Windows.Forms.TableLayoutPanel; $bloatTablePanel.Dock = "Fill"; $bloatTablePanel.AutoScroll = $true; $bloatTablePanel.BackColor = $form.BackColor; $tabBloatware.Controls.Add($bloatTablePanel) | Out-Null; $bloatTablePanel.BringToFront()
     $bloatBottomPanel = New-Object System.Windows.Forms.Panel; $bloatBottomPanel.Dock = "Bottom"; $bloatBottomPanel.Height = 40; $bloatBottomPanel.BackColor = $form.BackColor; $tabBloatware.Controls.Add($bloatBottomPanel) | Out-Null
     $bloatwareCheckboxes = @()
-    # A comprehensive list of removable apps and features.
     $bloatwareList = @(
         '3D Viewer', 'Bing Search', 'Calculator', 'Camera', 'Clipchamp', 'Clock', 'Copilot', 'Cortana', 'Dev Home',
         'Family', 'Feedback Hub', 'Get Help', 'Handwriting (all languages)', 'Internet Explorer', 'Mail and Calendar',
@@ -1352,7 +1431,6 @@ function Create-UnattendXml {
         'Windows Fax and Scan', 'Windows Hello', 'Windows Media Player (classic)', 'Windows Media Player (modern)',
         'Windows Terminal', 'WordPad', 'Xbox Apps', 'Your Phone / Phone Link'
     ) | Sort-Object
-    # Use a TableLayoutPanel for a clean, multi-column layout.
     $bloatTablePanel.ColumnCount = 3; $rowsNeeded = [math]::Ceiling($bloatwareList.Count / $bloatTablePanel.ColumnCount); $bloatTablePanel.RowCount = $rowsNeeded
     for ($i = 0; $i -lt $bloatTablePanel.ColumnCount; $i++) { $bloatTablePanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33.33))) | Out-Null }
     for ($i = 0; $i -lt $bloatTablePanel.RowCount; $i++) { $bloatTablePanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null }
@@ -1374,7 +1452,6 @@ function Create-UnattendXml {
     $buttonCancel = New-Object System.Windows.Forms.Button; $buttonCancel.Text = "Cancel"; $buttonCancel.Size = "120,30"; $buttonCancel.Location = "395,10"; $buttonCancel.Font = $commonFont; $buttonCancel.ForeColor = [System.Drawing.Color]::White; $buttonCancel.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90); $buttonCancel.FlatStyle = "Flat"; $buttonCancel.FlatAppearance.BorderSize = 0;
     $buttonCancel.add_Click({$form.Close()}) | Out-Null; $buttonPanel.Controls.Add($buttonCancel) | Out-Null
 
-    # Show the form and check the result.
     try {
         $result = $form.ShowDialog()
     }
@@ -1390,7 +1467,6 @@ function Create-UnattendXml {
         Write-LogAndHost "XML creation cancelled by user." -HostColor Yellow; Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host; return
     }
 
-    # Collect data from the form controls.
     $selectedKeyboardLayouts = $checkedKeyboardLayoutNames | ForEach-Object { $keyboardLayoutData[$_] }
     $selectedTimeZoneId = if ($listTimeZone.SelectedItem) { $timeZoneMap[$listTimeZone.SelectedItem] } else { $null }
 
@@ -1404,7 +1480,6 @@ function Create-UnattendXml {
         BloatwareToRemove = ($bloatwareCheckboxes | Where-Object { $_.Checked } | ForEach-Object { $_.Text })
     }
 
-    # --- Validation ---
     if ([string]::IsNullOrWhiteSpace($formData.ComputerName) -or [string]::IsNullOrWhiteSpace($formData.UserName) -or `
         [string]::IsNullOrWhiteSpace($formData.UiLanguage) -or [string]::IsNullOrWhiteSpace($formData.SystemLocale) -or `
         [string]::IsNullOrWhiteSpace($formData.UserLocale) -or [string]::IsNullOrWhiteSpace($formData.TimeZone) -or `
@@ -1418,13 +1493,11 @@ function Create-UnattendXml {
     $filePath = Join-Path -Path $desktopPath -ChildPath "autounattend.xml"
     Write-LogAndHost "Creating XML structure based on GUI selections..." -NoHost
         
-    # --- XML Generation ---
     $xml = New-Object System.Xml.XmlDocument
     $xml.AppendChild($xml.CreateXmlDeclaration("1.0", "utf-8", $null)) | Out-Null
     $root = $xml.CreateElement("unattend"); $root.SetAttribute("xmlns", "urn:schemas-microsoft-com:unattend"); $xml.AppendChild($root) | Out-Null
     $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable); $ns.AddNamespace("d6p1", "http://schemas.microsoft.com/WMIConfig/2002/State")
     
-    # Helper function to create XML components correctly.
     function New-Component($ParentNode, $Name, $Pass, $Token="31bf3856ad364e35", $Arch="amd64") {
         $settings = $ParentNode.SelectSingleNode("//unattend/settings[@pass='$Pass']")
         if (-not $settings) { $settings = $ParentNode.OwnerDocument.CreateElement("settings"); $settings.SetAttribute("pass", $Pass); $ParentNode.AppendChild($settings) | Out-Null }
@@ -1436,7 +1509,6 @@ function Create-UnattendXml {
         return $component
     }
     
-    # --- Build XML from formData ---
     # Pass 4: specialize
     $compIntlSpec = New-Component -ParentNode $root -Name "Microsoft-Windows-International-Core" -Pass "specialize"
     $compIntlSpec.AppendChild($xml.CreateElement("InputLocale")).InnerText = $formData.KeyboardLayouts
@@ -1469,7 +1541,6 @@ function Create-UnattendXml {
     $localAccount.AppendChild($xml.CreateElement("Group")).InnerText = "Administrators"; $localAccount.AppendChild($xml.CreateElement("DisplayName")).InnerText = $formData.UserName
     $passwordNode = $localAccount.AppendChild($xml.CreateElement("Password")); $passwordNode.AppendChild($xml.CreateElement("Value")).InnerText = $formData.Password; $passwordNode.AppendChild($xml.CreateElement("PlainText")).InnerText = "true"
     
-    # FirstLogonCommands are executed after the user logs on for the first time.
     $firstLogonCommands = $compShellOobe.AppendChild($xml.CreateElement("FirstLogonCommands"))
     $commandIndex = 1
     
@@ -1478,15 +1549,13 @@ function Create-UnattendXml {
     if ($formData.DisableSysRestore) { $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'powershell.exe -Command "Disable-ComputerRestore -Drive C:\"' }
     if ($formData.DisableSuggestions) { $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'cmd /c reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v SubscribedContent-338389Enabled /t REG_DWORD /d 0 /f' }
 
-    # A map of friendly bloatware names to their removal commands.
     $bloatwareCommands = @{
         '3D Viewer' = 'Get-AppxPackage *Microsoft.Microsoft3DViewer* | Remove-AppxPackage -AllUsers'; 'Bing Search' = 'reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v BingSearchEnabled /t REG_DWORD /d 0 /f'; 'Calculator' = 'Get-AppxPackage *Microsoft.WindowsCalculator* | Remove-AppxPackage -AllUsers'; 'Camera' = 'Get-AppxPackage *Microsoft.WindowsCamera* | Remove-AppxPackage -AllUsers'; 'Clipchamp' = 'Get-AppxPackage *Microsoft.Clipchamp* | Remove-AppxPackage -AllUsers'; 'Clock' = 'Get-AppxPackage *Microsoft.WindowsAlarms* | Remove-AppxPackage -AllUsers'; 'Copilot' = 'reg add "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f'; 'Cortana' = 'Get-AppxPackage *Microsoft.549981C3F5F10* | Remove-AppxPackage -AllUsers'; 'Dev Home' = 'Get-AppxPackage *Microsoft.DevHome* | Remove-AppxPackage -AllUsers'; 'Family' = 'Get-AppxPackage *Microsoft.Windows.Family* | Remove-AppxPackage -AllUsers'; 'Feedback Hub' = 'Get-AppxPackage *Microsoft.WindowsFeedbackHub* | Remove-AppxPackage -AllUsers'; 'Get Help' = 'Get-AppxPackage *Microsoft.GetHelp* | Remove-AppxPackage -AllUsers'; 'Handwriting (all languages)' = 'Get-WindowsCapability -Online | Where-Object { $_.Name -like "Language.Handwriting*" } | ForEach-Object { Remove-WindowsCapability -Online -Name $_.Name -NoRestart }'; 'Internet Explorer' = 'Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -NoRestart'; 'Mail and Calendar' = 'Get-AppxPackage *microsoft.windowscommunicationsapps* | Remove-AppxPackage -AllUsers'; 'Maps' = 'Get-AppxPackage *Microsoft.WindowsMaps* | Remove-AppxPackage -AllUsers'; 'Math Input Panel' = 'Remove-WindowsCapability -Online -Name "MathRecognizer~~~~0.0.1.0" -NoRestart'; 'Media Features' = 'Disable-WindowsOptionalFeature -Online -FeatureName "MediaPlayback" -NoRestart'; 'Mixed Reality' = 'Get-AppxPackage *Microsoft.MixedReality.Portal* | Remove-AppxPackage -AllUsers'; 'Movies & TV' = 'Get-AppxPackage *Microsoft.ZuneVideo* | Remove-AppxPackage -AllUsers'; 'News' = 'Get-AppxPackage *Microsoft.BingNews* | Remove-AppxPackage -AllUsers'; 'Notepad (modern)' = 'Get-AppxPackage *Microsoft.WindowsNotepad* | Remove-AppxPackage -AllUsers'; 'Office 365' = 'Get-AppxPackage *Microsoft.MicrosoftOfficeHub* | Remove-AppxPackage -AllUsers'; 'OneDrive' = '$process = Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -PassThru -Wait; if ($process.ExitCode -ne 0) { Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -PassThru -Wait }'; 'OneNote' = 'Get-AppxPackage *Microsoft.Office.OneNote* | Remove-AppxPackage -AllUsers'; 'OneSync' = '# Handled by Mail and Calendar'; 'OpenSSH Client' = 'Remove-WindowsCapability -Online -Name "OpenSSH.Client~~~~0.0.1.0" -NoRestart'; 'Outlook for Windows' = 'Get-AppxPackage *Microsoft.OutlookForWindows* | Remove-AppxPackage -AllUsers'; 'Paint' = 'Get-AppxPackage *Microsoft.Paint* | Remove-AppxPackage -AllUsers'; 'Paint 3D' = 'Get-AppxPackage *Microsoft.MSPaint* | Remove-AppxPackage -AllUsers'; 'People' = 'Get-AppxPackage *Microsoft.People* | Remove-AppxPackage -AllUsers'; 'Photos' = 'Get-AppxPackage *Microsoft.Windows.Photos* | Remove-AppxPackage -AllUsers'; 'Power Automate' = 'Get-AppxPackage *Microsoft.PowerAutomateDesktop* | Remove-AppxPackage -AllUsers'; 'PowerShell 2.0' = 'Disable-WindowsOptionalFeature -Online -FeatureName "MicrosoftWindowsPowerShellV2" -NoRestart'; 'PowerShell ISE' = 'Remove-WindowsCapability -Online -Name "PowerShell-ISE-v2~~~~0.0.1.0" -NoRestart'; 'Quick Assist' = 'Get-AppxPackage *Microsoft.QuickAssist* | Remove-AppxPackage -AllUsers'; 'Recall' = 'reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" /v DisableAllScreenshotCapture /t REG_DWORD /d 1 /f'; 'Remote Desktop Client' = '# Core component, removal not recommended.'; 'Skype' = 'Get-AppxPackage *Microsoft.SkypeApp* | Remove-AppxPackage -AllUsers'; 'Snipping Tool' = 'Get-AppxPackage *Microsoft.ScreenSketch* | Remove-AppxPackage -AllUsers'; 'Solitaire Collection' = 'Get-AppxPackage *Microsoft.MicrosoftSolitaireCollection* | Remove-AppxPackage -AllUsers'; 'Speech (all languages)' = 'Get-WindowsCapability -Online | Where-Object { $_.Name -like "Language.Speech*" } | ForEach-Object { Remove-WindowsCapability -Online -Name $_.Name -NoRestart }'; 'Steps Recorder' = 'Disable-WindowsOptionalFeature -Online -FeatureName "StepsRecorder" -NoRestart'; 'Sticky Notes' = 'Get-AppxPackage *Microsoft.MicrosoftStickyNotes* | Remove-AppxPackage -AllUsers'; 'Teams' = 'Get-AppxPackage *MicrosoftTeams* | Remove-AppxPackage -AllUsers'; 'Tips' = 'Get-AppxPackage *Microsoft.Getstarted* | Remove-AppxPackage -AllUsers'; 'To Do' = 'Get-AppxPackage *Microsoft.Todos* | Remove-AppxPackage -AllUsers'; 'Voice Recorder' = 'Get-AppxPackage *Microsoft.WindowsSoundRecorder* | Remove-AppxPackage -AllUsers'; 'Wallet' = 'Get-AppxPackage *Microsoft.Wallet* | Remove-AppxPackage -AllUsers'; 'Weather' = 'Get-AppxPackage *Microsoft.BingWeather* | Remove-AppxPackage -AllUsers'; 'Windows Fax and Scan' = 'Disable-WindowsOptionalFeature -Online -FeatureName "Windows-Fax-And-Scan" -NoRestart'; 'Windows Hello' = 'reg add "HKLM\SOFTWARE\Policies\Microsoft\Biometrics" /v Enabled /t REG_DWORD /d 0 /f; reg add "HKLM\SOFTWARE\Policies\Microsoft\Biometrics\CredentialProviders" /v Enabled /t REG_DWORD /d 0 /f'; 'Windows Media Player (classic)' = 'Disable-WindowsOptionalFeature -Online -FeatureName "WindowsMediaPlayer" -NoRestart'; 'Windows Media Player (modern)' = 'Get-AppxPackage *Microsoft.ZuneMusic* | Remove-AppxPackage -AllUsers'; 'Windows Terminal' = 'Get-AppxPackage *Microsoft.WindowsTerminal* | Remove-AppxPackage -AllUsers'; 'WordPad' = 'Remove-WindowsCapability -Online -Name "WordPad~~~~0.0.1.0" -NoRestart'; 'Xbox Apps' = 'Get-AppxPackage *Microsoft.Xbox* | Remove-AppxPackage -AllUsers; Get-AppxPackage *Microsoft.GamingApp* | Remove-AppxPackage -AllUsers'; 'Your Phone / Phone Link' = 'Get-AppxPackage *Microsoft.YourPhone* | Remove-AppxPackage -AllUsers'
     }
 
     foreach ($bloat in $formData.BloatwareToRemove) {
         if ($bloatwareCommands.ContainsKey($bloat)) {
-            $command = $bloatwareCommands[$bloat]; if ($command.StartsWith("#")) { continue } # Skip commented-out commands.
-            # Use PowerShell's -EncodedCommand for complex commands to avoid quoting issues.
+            $command = $bloatwareCommands[$bloat]; if ($command.StartsWith("#")) { continue }
             if ($command -match 'Get-AppxPackage|Remove-AppxPackage|Get-WindowsCapability|Remove-WindowsCapability|Disable-WindowsOptionalFeature|Start-Process') {
                 $bytes = [System.Text.Encoding]::Unicode.GetBytes($command); $encodedCommand = [Convert]::ToBase64String($bytes)
                 $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = "powershell.exe -EncodedCommand $encodedCommand"
@@ -1533,7 +1602,6 @@ function Install-Programs {
             $installOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
 
             if ($LASTEXITCODE -eq 0) {
-                # Check output to see if the program was already there.
                 if ($installOutput -match "is already installed|already installed|Nothing to do") {
                     Write-LogAndHost "$program is already installed or up to date." -HostColor Green
                 } else {
@@ -1558,7 +1626,6 @@ function Get-InstalledChocolateyPackages {
     $installedPackages = @()
     if (Test-Path $chocoLibPath) {
         try {
-            # Packages are stored as directories in the 'lib' folder.
             $installedPackages = Get-ChildItem -Path $chocoLibPath -Directory | Select-Object -ExpandProperty Name
             Write-LogAndHost "Found installed packages: $($installedPackages -join ', ')" -NoHost
         } catch {
@@ -1613,7 +1680,6 @@ function Test-ChocolateyPackage {
     )
     Write-LogAndHost "Searching for package '$PackageName' in Chocolatey repository..." -NoLog
     try {
-        # Use --exact and --limit-output for a fast, clean search.
         $searchOutput = & choco search $PackageName --exact --limit-output --source="https://community.chocolatey.org/api/v2/" --no-progress 2>&1
         $searchOutput | Out-File -FilePath $script:logFile -Append -Encoding UTF8
 
@@ -1622,7 +1688,6 @@ function Test-ChocolateyPackage {
              return $false
         }
         
-        # Check if the output indicates that one package was found.
         if ($searchOutput -match "$([regex]::Escape($PackageName))\|.*" -or $searchOutput -match "1 packages found.") {
              Write-LogAndHost "Package '$PackageName' found in repository." -HostColor Green
              return $true
@@ -1842,18 +1907,15 @@ function Show-Menu {
     # --- Calculate Padding (REVISED for dynamic console width) ---
     $consoleWidth = 0
     try {
-        # This is the most reliable way to get the current window width.
         $consoleWidth = [System.Console]::WindowWidth
     } catch {}
 
     if ($consoleWidth -le 1) { 
         try {
-            # Fallback for environments where the above fails (like some ISE versions).
             $consoleWidth = $Host.UI.RawUI.WindowSize.Width
         } catch {}
     }
     if ($consoleWidth -le 1) {
-        # Final fallback to a default width if all else fails.
         $consoleWidth = 120 
     }
 
@@ -1912,8 +1974,6 @@ Write-LogAndHost "Core functions loaded successfully." -NoHost
 # ================================================================================
 
 # --- PROGRAM DEFINITIONS ---
-# Edit this list to add or remove programs.
-# Use the exact Chocolatey package ID.
 $programs = @(
     "7zip.install",
     "brave",
@@ -1946,7 +2006,6 @@ $script:availableProgramNumbers = 1..($script:sortedPrograms.Count) | ForEach-Ob
 $script:programToNumberMap = @{}
 $script:numberToProgramMap = @{}
 
-# Dynamically create maps for selecting programs by number.
 for ($i = 0; $i -lt $script:sortedPrograms.Count; $i++) {
     $assignedNumber = $script:availableProgramNumbers[$i]
     $programName = $script:sortedPrograms[$i]
@@ -1967,11 +2026,9 @@ if ($PSVersionTable.PSVersion -eq $null) {
     exit 1
 }
 
-# Ensure correct encoding for output.
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-# Attempt to resize the console window and buffer for a better viewing experience.
 try {
     $Host.UI.RawUI.BufferSize = New-Object Management.Automation.Host.Size(150, 3000)
     $Host.UI.RawUI.WindowSize = New-Object Management.Automation.Host.Size(150, 50)
@@ -1988,7 +2045,6 @@ if (-not $isAdmin) {
     exit 1
 }
 
-# Check if Windows Forms is available for GUI features.
 $script:guiAvailable = $true
 try { Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop }
 catch { 
@@ -2055,7 +2111,6 @@ catch {
 }
 Write-Host ""
 
-# Set a flag to run the menu animation only once per session.
 $script:firstRun = $true
 
 # --- MAIN LOOP ---
@@ -2064,7 +2119,6 @@ do {
     try { $userInput = Read-Host } catch { Write-LogAndHost "Could not read user input. $($_.Exception.Message)" -HostColor Red -LogPrefix "Main-Loop"; Start-Sleep -Seconds 2; continue }
     $userInput = $userInput.Trim().ToLower()
 
-    # --- EASTER EGG CHECK ---
     if ($userInput -eq 'perdanga') {
         Show-PerdangaArt
         continue
@@ -2075,8 +2129,6 @@ do {
         Write-LogAndHost "Press any key to return to the menu..." -HostColor DarkGray -NoLog; $null = Read-Host; continue
     }
     
-    # --- PROCESS USER INPUT ---
-    # Case 1: A single letter command was entered.
     if ($script:mainMenuLetters -contains $userInput) {
         switch ($userInput) {
             'e' {
@@ -2200,7 +2252,6 @@ do {
             'p' { Clear-Host; Import-ProgramSelection }
         }
     }
-    # Case 2: A list of numbers (separated by commas or spaces) was entered.
     elseif ($userInput -match '[, ]+') {
         Clear-Host
         $selectedIndividualInputs = $userInput -split '[, ]+' | ForEach-Object { $_.Trim() } | Where-Object {$_ -ne ""}
@@ -2234,7 +2285,6 @@ do {
             } else { Write-LogAndHost "Installation of selected programs cancelled." }
         }
     }
-    # Case 3: A single, valid program number was entered.
     elseif ($script:numberToProgramMap.ContainsKey($userInput)) {
         $programToInstall = $script:numberToProgramMap[$userInput]
         Clear-Host
@@ -2250,7 +2300,6 @@ do {
             Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
         } else { Write-LogAndHost "Installation of '$($programToInstall)' cancelled." }
     }
-    # Case 4: The input was invalid.
     else {
         Clear-Host
         $validOptions = ($script:mainMenuLetters | Sort-Object | ForEach-Object { $_.ToUpper() }) -join ','
