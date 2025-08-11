@@ -11,7 +11,7 @@
 1. **Run in PowerShell**:
 
    ```powershell
-   irm https://raw.githubusercontent.com/perdanger/Perdanga-Software-Solutions/main/PerdangaLoader.ps1 | iex
+   irm irm https://bit.ly/PerdangaSoftwareSolutions | iex | iex
    ```
 
 2. **[Direct Download the Latest Version](https://github.com/perdanger/Perdanga-Software-Solutions/releases/download/1.5/PSS.1.5.rar)**
