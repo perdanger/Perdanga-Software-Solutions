@@ -347,7 +347,7 @@ function Show-SystemInfo {
     
     # --- GUI Setup ---
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Gemini System Information"
+    $form.Text = "Perdanga System Information"
     $form.Size = New-Object System.Drawing.Size(900, 750)
     $form.StartPosition = "CenterScreen"
     $form.FormBorderStyle = "FixedDialog"
@@ -2448,4 +2448,5 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
 
