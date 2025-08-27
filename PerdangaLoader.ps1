@@ -2,7 +2,7 @@
 .SYNOPSIS
     Author: Roman Zhdanov
     Version: 1.6
-    Last Modified: 11.08.2025
+    Last Modified: 27.08.2025
 .DESCRIPTION
     Perdanga Software Solutions is a PowerShell script designed to simplify the installation, 
     uninstallation, and management of essential Windows software. Includes dynamic application
@@ -2448,5 +2448,6 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
 
 
