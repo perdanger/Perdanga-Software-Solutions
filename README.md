@@ -66,18 +66,10 @@ Customize your Windows installation with these options:
 
 Enhanced system cleanup with dynamic application cache detection:
 
-- **Windows Temporary Files**: Clean standard Windows temp directories.
-- **Application Caches**: Automatically detect and clean caches from popular applications including:
-  - NVIDIA Cache
-  - DirectX Shader Cache
-  - Steam Cache
-  - Discord Cache
-  - EA App Cache
-  - Spotify Cache
-  - Visual Studio Code Cache
-  - And many more...
-- **Browser Caches**: Detect and clean caches from installed web browsers.
-- **System Caches**: Windows Update Cache, Prefetch files, and Recycle Bin.
+- **Windows Temporary Files**
+- **Application Caches**
+- **Browser Caches**
+- **System Caches**
 
 ![System Cleanup](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/SystemCleanup.png?raw=true)
 
