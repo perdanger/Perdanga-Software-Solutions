@@ -75,15 +75,13 @@ Enhanced system cleanup with dynamic application cache detection:
 
 ### 4. System Information [I]
 
-Enhanced system information display with a modern graphical interface:
-
-- **Operating System**: Name, version, build, architecture, and product ID.
-- **Processor**: Name, core count, and virtualization status.
-- **System Hardware**: Manufacturer, model, motherboard, BIOS version, Secure Boot, and TPM status.
-- **Memory (RAM)**: Total installed memory and detailed module information.
-- **Video Card(s)**: GPU name, VRAM, and driver version.
-- **Disk Drives**: Physical disks with partition information and free space.
-- **Network Adapters**: Detailed network configuration including IP, MAC, gateway, and DNS.
+- **Operating System**
+- **Processor**
+- **System Hardware**
+- **Memory (RAM)**
+- **Video Card(s)**
+- **Disk Drives**
+- **Network Adapters**
 
 ![System Information](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/SystemInfo.png?raw=true)
 
@@ -110,22 +108,6 @@ Imports a JSON file containing a list of program names to install:
 
 - **Logs**:
   - Review `install_log_YYYYMMDD_HHMMSS.txt` in the script directory or `%TEMP%` folder for detailed error information.
-
-## 📜 Version History
-
-### Version 1.6 (31.08.2025)
-- Added dynamic application cache cleaning functionality
-- Enhanced System Information GUI with a new graphical layout (Gemini-themed)
-- Added Secure Boot and TPM status information to the System Information
-- Updated disk information display
-- Enhanced browser cache detection in the cleanup function
-
-### Version 1.5 (28.07.2025)
-- Initial release with core functionality
-- Program installation and uninstallation
-- System cleanup features
-- Unattend.xml creator
-- Windows activation and Spotify activation
 
 ## 📜 Credits
 
