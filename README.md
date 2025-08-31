@@ -43,7 +43,7 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 - **[F] Create Unattend.xml File [GUI]**
 - **[S] System Cleanup [GUI]**
 - **[P] Import & Install from File**
-- **[I] Show System Information**
+- **[I] Show System Information [GUI]**
 
 > [!TIP]  
 > To install specific programs, enter their numbers (e.g., `1 5 17`, or `1,5,17`) from the supported programs list.  
