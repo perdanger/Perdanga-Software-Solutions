@@ -1,3 +1,5 @@
+
+
 # Perdanga Software Solutions
 
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue) ![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green) ![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown) ![PowerShell](https://img.shields.io/badge/Powered%20by-PowerShell-blue) ![Open Source](https://img.shields.io/badge/Open%20Source-PerdangaForever-brightgreen) ![GitHub Stars](https://img.shields.io/github/stars/perdanger/Perdanga-Software-Solutions?style=social)
@@ -14,7 +16,7 @@
    irm https://bit.ly/PerdangaSoftwareSolutions | iex
    ```
 
-2. **[Direct Download the Latest Version](https://github.com/perdanger/Perdanga-Software-Solutions/releases/download/1.5/PSS.1.5.rar)**
+2. **[Direct Download the Latest Version](https://github.com/perdanger/Perdanga-Software-Solutions/releases/download/1.6/PSS.1.6.rar)**
 
 > [!IMPORTANT]  
 > Ensure is run with **Administrator privileges** to avoid execution issues.
@@ -58,8 +60,42 @@ Customize your Windows installation with these options:
 - **Bloatware Removal**: Remove unwanted pre-installed apps during setup.
 - **Output**: Saves the `autounattend.xml` file to your Desktop for use with a Windows installation USB.
 
+![Unattend.xml Creator](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/UnattendxmlFile.png?raw=true)
 
-### 3. Import & Install from File [P]
+### 3. System Cleanup [S]
+
+Enhanced system cleanup with dynamic application cache detection:
+
+- **Windows Temporary Files**: Clean standard Windows temp directories.
+- **Application Caches**: Automatically detect and clean caches from popular applications including:
+  - NVIDIA Cache
+  - DirectX Shader Cache
+  - Steam Cache
+  - Discord Cache
+  - EA App Cache
+  - Spotify Cache
+  - Visual Studio Code Cache
+  - And many more...
+- **Browser Caches**: Detect and clean caches from installed web browsers.
+- **System Caches**: Windows Update Cache, Prefetch files, and Recycle Bin.
+
+![System Cleanup](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/SystemCleanup.png?raw=true)
+
+### 4. System Information [I]
+
+Enhanced system information display with a modern graphical interface:
+
+- **Operating System**: Name, version, build, architecture, and product ID.
+- **Processor**: Name, core count, and virtualization status.
+- **System Hardware**: Manufacturer, model, motherboard, BIOS version, Secure Boot, and TPM status.
+- **Memory (RAM)**: Total installed memory and detailed module information.
+- **Video Card(s)**: GPU name, VRAM, and driver version.
+- **Disk Drives**: Physical disks with partition information and free space.
+- **Network Adapters**: Detailed network configuration including IP, MAC, gateway, and DNS.
+
+![System Information](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/SystemInfo.png?raw=true)
+
+### 5. Import & Install from File [P]
 
 Imports a JSON file containing a list of program names to install:
 
@@ -75,13 +111,29 @@ Imports a JSON file containing a list of program names to install:
   - Check your execution policy: `Get-ExecutionPolicy`. If restricted, set it to `RemoteSigned` with `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`.
 
 - **GUI Unavailable**:
-  - If `[G]`, `[U]`, `[F]`, or `[S]` options fail, ensure `System.Windows.Forms` is available. Alternatively, use CLI-based options.
+  - If `[G]`, `[U]`, `[F]`, `[S]`, or `[I]` options fail, ensure `System.Windows.Forms` is available. Alternatively, use CLI-based options.
 
 - **Package Not Found**:
   - For `[C]`, confirm the package ID exists in the Chocolatey repository: `choco search <id>`.
 
 - **Logs**:
   - Review `install_log_YYYYMMDD_HHMMSS.txt` in the script directory or `%TEMP%` folder for detailed error information.
+
+## 📜 Version History
+
+### Version 1.6 (31.08.2025)
+- Added dynamic application cache cleaning functionality
+- Enhanced System Information GUI with a new graphical layout (Gemini-themed)
+- Added Secure Boot and TPM status information to the System Information
+- Updated disk information display
+- Enhanced browser cache detection in the cleanup function
+
+### Version 1.5 (28.07.2025)
+- Initial release with core functionality
+- Program installation and uninstallation
+- System cleanup features
+- Unattend.xml creator
+- Windows activation and Spotify activation
 
 ## 📜 Credits
 
