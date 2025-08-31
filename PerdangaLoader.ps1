@@ -2,7 +2,7 @@
 .SYNOPSIS
     Author: Roman Zhdanov
     Version: 1.6
-    Last Modified: 27.08.2025
+    Last Modified: 31.08.2025
 .DESCRIPTION
     Perdanga Software Solutions is a PowerShell script designed to simplify the installation, 
     uninstallation, and management of essential Windows software. Includes dynamic application
@@ -707,7 +707,7 @@ function Show-SystemInfo {
     $null = Read-Host
 }
 
-# NEW FUNCTION (v1.5): Imports a list of programs from a file and installs them.
+#  FUNCTION : Imports a list of programs from a file and installs them.
 function Import-ProgramSelection {
     if (-not $script:guiAvailable) {
         Write-LogAndHost "GUI is not available, cannot launch the Program Import tool." -HostColor Red -LogPrefix "Import-ProgramSelection"
@@ -786,196 +786,293 @@ function Import-ProgramSelection {
     $null = Read-Host
 }
 
-# ENHANCED FUNCTION: Dynamically finds potential cache folders for installed applications, including a list of well-known ones and installed browsers.
-function Find-DynamicAppCaches {
-    Write-LogAndHost "Scanning for application caches..." -NoHost -LogPrefix "Find-DynamicAppCaches"
+function Invoke-TempFileCleanup {
+    # Nested function to find dynamic application caches (enhanced)
+    function Find-DynamicAppCaches {
+        Write-LogAndHost "Scanning for application caches..." -NoHost -LogPrefix "Find-DynamicAppCaches"
+        
+        # Return structure with two categories: Application and System caches
+        $result = @{
+            ApplicationCaches = [ordered]@{}
+            SystemCaches = [ordered]@{}
+        }
+        
+        $processedApps = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
     
-    $discoveredCaches = [ordered]@{}
-    $processedApps = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
-
-    # --- Start with a list of well-known application caches ---
-    $wellKnownApps = [ordered]@{
-        "NVIDIA Cache"             = @("$env:LOCALAPPDATA\NVIDIA\GLCache", "$env:ProgramData\NVIDIA Corporation\Downloader");
-        "DirectX Shader Cache"     = @("$env:LOCALAPPDATA\D3DSCache");
-        "Steam Cache"              = @("$env:LOCALAPPDATA\Steam\appcache", "$env:LOCALAPPDATA\Steam\htmlcache");
-        "Discord Cache"            = @("$env:APPDATA\discord\Cache", "$env:APPDATA\discord\Code Cache", "$env:APPDATA\discord\GPUCache");
-        "EA App Cache"             = @("$env:LOCALAPPDATA\Electronic Arts\EA Desktop\cache");
-        "Spotify Cache"            = @("$env:LOCALAPPDATA\Spotify\Storage", "$env:LOCALAPPDATA\Spotify\Browser");
-        "Visual Studio Code Cache" = @("$env:APPDATA\Code\Cache", "$env:APPDATA\Code\GPUCache", "$env:APPDATA\Code\CachedData");
-        "Slack Cache"              = @("$env:APPDATA\Slack\Cache", "$env:APPDATA\Slack\GPUCache", "$env:APPDATA\Slack\Service Worker\CacheStorage");
-        "Zoom Cache"               = @("$env:APPDATA\Zoom\data\Cache");
-        "Adobe Cache"              = @("$env:LOCALAPPDATA\Adobe\Common\Media Cache Files", "$env:LOCALAPPDATA\Adobe\Common\Media Cache");
-        "Telegram Cache"           = @("$env:APPDATA\Telegram Desktop\tdata\user_data\cache");
-    }
-
-    Write-LogAndHost "Checking for well-known application caches..." -NoHost
-    foreach ($appName in $wellKnownApps.Keys) {
-        $existingPaths = $wellKnownApps[$appName] | ForEach-Object { Resolve-Path $_ -ErrorAction SilentlyContinue } | Select-Object -ExpandProperty Path
-        if ($existingPaths) {
-            Write-LogAndHost "Found existing well-known cache for '$appName'." -NoHost
-            $discoveredCaches[$appName] = @{ Paths = $existingPaths; Type = 'Folder' }
-            [void]$processedApps.Add($appName)
+        # --- Enhanced list of well-known application caches ---
+        $wellKnownApps = [ordered]@{
+            "NVIDIA Cache"             = @("$env:LOCALAPPDATA\NVIDIA\GLCache", "$env:ProgramData\NVIDIA Corporation\Downloader", "$env:LOCALAPPDATA\NVIDIA\DXCache");
+            "DirectX Shader Cache"     = @("$env:LOCALAPPDATA\D3DSCache", "$env:LOCALAPPDATA\AMD\DxCache");
+            "Steam Cache"              = @("$env:LOCALAPPDATA\Steam\appcache", "$env:LOCALAPPDATA\Steam\htmlcache", "$env:ProgramFiles\Steam\package");
+            "Discord Cache"            = @("$env:APPDATA\discord\Cache", "$env:APPDATA\discord\Code Cache", "$env:APPDATA\discord\GPUCache", "$env:APPDATA\discord\Local Storage");
+            "EA App Cache"             = @("$env:LOCALAPPDATA\Electronic Arts\EA Desktop\cache", "$env:ProgramData\Electronic Arts\EA Desktop\cache");
+            "Spotify Cache"            = @("$env:LOCALAPPDATA\Spotify\Storage", "$env:LOCALAPPDATA\Spotify\Browser", "$env:LOCALAPPDATA\Spotify\Data");
+            "Visual Studio Code Cache" = @("$env:APPDATA\Code\Cache", "$env:APPDATA\Code\GPUCache", "$env:APPDATA\Code\CachedData", "$env:APPDATA\Code\Local Storage");
+            "Slack Cache"              = @("$env:APPDATA\Slack\Cache", "$env:APPDATA\Slack\GPUCache", "$env:APPDATA\Slack\Service Worker\CacheStorage", "$env:APPDATA\Slack\IndexedDB");
+            "Zoom Cache"               = @("$env:APPDATA\Zoom\data\Cache", "$env:APPDATA\Zoom\data\logs");
+            "Adobe Cache"              = @("$env:LOCALAPPDATA\Adobe\Common\Media Cache Files", "$env:LOCALAPPDATA\Adobe\Common\Media Cache", "$env:APPDATA\Adobe\Logs");
+            "Telegram Cache"           = @("$env:APPDATA\Telegram Desktop\tdata\user_data\cache", "$env:APPDATA\Telegram Desktop\tdata\temp");
+            "Microsoft Teams Cache"    = @("$env:APPDATA\Microsoft\Teams\Cache", "$env:APPDATA\Microsoft\Teams\blob_storage", "$env:APPDATA\Microsoft\Teams\databases");
+            "OneDrive Cache"           = @("$env:LOCALAPPDATA\Microsoft\OneDrive\cache", "$env:LOCALAPPDATA\Microsoft\OneDrive\logs");
+            "Dropbox Cache"            = @("$env:LOCALAPPDATA\Dropbox\cache", "$env:LOCALAPPDATA\Dropbox\logs");
+            "Google Drive Cache"       = @("$env:LOCALAPPDATA\Google\DriveFS\cache", "$env:LOCALAPPDATA\Google\DriveFS\logs");
+            "Firefox Cache"            = @("$env:APPDATA\Mozilla\Firefox\Profiles\*\cache2", "$env:APPDATA\Mozilla\Firefox\Profiles\*\startupCache");
         }
-    }
-
-    # --- Dynamically find installed web browser caches ---
-    Write-LogAndHost "Scanning for installed web browser caches..." -NoHost
-    $browserCacheConfigs = [ordered]@{
-        "Google Chrome" = @{
-            InstallPaths = @(
-                "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-                "$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe"
-            );
-            CacheDirs = @(
-                "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache",
-                "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Code Cache",
-                "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\GPUCache"
-            )
-        };
-        "Microsoft Edge" = @{
-            InstallPaths = @(
-                "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe"
-            );
-            CacheDirs = @(
-                "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache",
-                "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Code Cache",
-                "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\GPUCache"
-            )
-        };
-        "Brave Browser" = @{
-            InstallPaths = @(
-                "$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\brave.exe",
-                "$env:ProgramFiles(x86)\BraveSoftware\Brave-Browser\Application\brave.exe"
-            );
-            CacheDirs = @(
-                "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\Cache",
-                "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\Code Cache",
-                "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\GPUCache"
-            )
-        };
-        "Opera Browser" = @{
-            InstallPaths = @(
-                "$env:ProgramFiles\Opera\launcher.exe",
-                "$env:ProgramFiles(x86)\Opera\launcher.exe"
-            );
-            CacheDirs = @(
-                "$env:LOCALAPPDATA\Opera Software\Opera Stable\Cache",
-                "$env:LOCALAPPDATA\Opera Software\Opera Stable\Code Cache",
-                "$env:LOCALAPPDATA\Opera Software\Opera Stable\GPUCache"
-            )
-        };
-        "Vivaldi Browser" = @{
-            InstallPaths = @(
-                "$env:ProgramFiles\Vivaldi\Application\vivaldi.exe",
-                "$env:ProgramFiles(x86)\Vivaldi\Application\vivaldi.exe"
-            );
-            CacheDirs = @(
-                "$env:LOCALAPPDATA\Vivaldi\User Data\Default\Cache",
-                "$env:LOCALAPPDATA\Vivaldi\User Data\Default\Code Cache",
-                "$env:LOCALAPPDATA\Vivaldi\User Data\Default\GPUCache"
-            )
-        };
-        "Mozilla Firefox" = @{
-            InstallPaths = @(
-                "$env:ProgramFiles\Mozilla Firefox\firefox.exe",
-                "$env:ProgramFiles(x86)\Mozilla Firefox\firefox.exe"
-            );
-            CacheDirs = @() # Populated dynamically below for profiles
-        }
-    }
-
-    foreach ($browserName in $browserCacheConfigs.Keys) {
-        $config = $browserCacheConfigs[$browserName]
-        $isBrowserInstalled = $false
-        foreach ($installPath in $config.InstallPaths) {
-            if (Test-Path $installPath) {
-                $isBrowserInstalled = $true
-                break
-            }
-        }
-
-        if ($isBrowserInstalled) {
-            $foundBrowserPaths = New-Object System.Collections.Generic.List[string]
-            if ($browserName -eq "Mozilla Firefox") {
-                # Special handling for Firefox profiles
-                $ffProfileDirs = Get-ChildItem -Path "$env:APPDATA\Mozilla\Firefox\Profiles" -Directory -ErrorAction SilentlyContinue
-                if ($ffProfileDirs) {
-                    $ffProfileDirs | ForEach-Object {
-                        $cachePath = Join-Path $_.FullName "cache2"
-                        if (Test-Path $cachePath) { [void]$foundBrowserPaths.Add($cachePath) }
+    
+        Write-LogAndHost "Checking for well-known application caches..." -NoHost
+        foreach ($appName in $wellKnownApps.Keys) {
+            $existingPaths = @()
+            foreach ($path in $wellKnownApps[$appName]) {
+                # Check if path exists and has content
+                if (Test-Path $path -PathType Container) {
+                    $size = (Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue | 
+                            Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                    if ($size -gt 0) {
+                        $existingPaths += $path
+                        Write-LogAndHost "Found cache for '$appName' at $path (Size: $([math]::Round($size/1MB, 2)) MB)" -NoHost
                     }
                 }
-            } else {
-                # For Chromium-based browsers
-                foreach ($cacheDir in $config.CacheDirs) {
-                    $resolvedPath = Resolve-Path $cacheDir -ErrorAction SilentlyContinue
-                    if ($resolvedPath) { [void]$foundBrowserPaths.Add($resolvedPath.Path) }
-                }
             }
-
-            if ($foundBrowserPaths.Count -gt 0) {
-                $uniquePaths = $foundBrowserPaths | Select-Object -Unique
-                Write-LogAndHost "Found cache for installed browser '$browserName': $($uniquePaths -join ', ')" -NoHost
-                $discoveredCaches[$browserName + " Cache"] = @{ Paths = $uniquePaths; Type = 'Folder' }
-                [void]$processedApps.Add($browserName)
+            
+            if ($existingPaths.Count -gt 0) {
+                $result.ApplicationCaches[$appName] = @{ Paths = $existingPaths; Type = 'Folder' }
+                [void]$processedApps.Add($appName)
             }
         }
-    }
-
-
-    # --- Now, scan the registry for other installed applications ---
-    Write-LogAndHost "Scanning registry for other installed applications..." -NoHost
-    $uninstallPaths = @(
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
-    )
-    $cacheFolderNames = @("Cache", "cache", "Code Cache", "GPUCache", "ShaderCache", "temp", "tmp")
-    $searchRoots = @($env:LOCALAPPDATA, $env:APPDATA, $env:ProgramData)
-
-    foreach ($path in $uninstallPaths) {
-        $regKeys = Get-ChildItem -Path $path -ErrorAction SilentlyContinue
-        if (-not $regKeys) { continue }
-
-        foreach ($key in $regKeys) {
-            $appName = $key.GetValue("DisplayName")
-            $publisher = $key.GetValue("Publisher")
-
-            if ([string]::IsNullOrWhiteSpace($appName) -or $appName -match "^KB[0-9]{6,}$" -or $processedApps.Contains($appName)) { continue }
-            [void]$processedApps.Add($appName)
-
-            $potentialNames = New-Object System.Collections.Generic.List[string]
-            $potentialNames.Add($appName)
-            if (-not [string]::IsNullOrWhiteSpace($publisher)) { $potentialNames.Add($publisher) }
+    
+        # --- Enhanced browser cache detection ---
+        Write-LogAndHost "Scanning for installed web browser caches..." -NoHost
+        $browserCacheConfigs = [ordered]@{
+            "Google Chrome" = @{
+                InstallPaths = @(
+                    "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+                    "$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe",
+                    "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+                );
+                CacheDirs = @(
+                    "$env:LOCALAPPDATA\Google\Chrome\User Data\*\Cache",
+                    "$env:LOCALAPPDATA\Google\Chrome\User Data\*\Code Cache",
+                    "$env:LOCALAPPDATA\Google\Chrome\User Data\*\GPUCache",
+                    "$env:LOCALAPPDATA\Google\Chrome\User Data\*\Service Worker"
+                )
+            };
+            "Microsoft Edge" = @{
+                InstallPaths = @(
+                    "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe",
+                    "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
+                );
+                CacheDirs = @(
+                    "$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Cache",
+                    "$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Code Cache",
+                    "$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\GPUCache",
+                    "$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Service Worker"
+                )
+            };
+            "Brave Browser" = @{
+                InstallPaths = @(
+                    "$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\brave.exe",
+                    "$env:ProgramFiles(x86)\BraveSoftware\Brave-Browser\Application\brave.exe"
+                );
+                CacheDirs = @(
+                    "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\*\Cache",
+                    "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\*\Code Cache",
+                    "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\*\GPUCache"
+                )
+            };
+            "Opera Browser" = @{
+                InstallPaths = @(
+                    "$env:ProgramFiles\Opera\launcher.exe",
+                    "$env:ProgramFiles(x86)\Opera\launcher.exe"
+                );
+                CacheDirs = @(
+                    "$env:LOCALAPPDATA\Opera Software\Opera*\Cache",
+                    "$env:LOCALAPPDATA\Opera Software\Opera*\Code Cache",
+                    "$env:LOCALAPPDATA\Opera Software\Opera*\GPUCache"
+                )
+            };
+            "Vivaldi Browser" = @{
+                InstallPaths = @(
+                    "$env:ProgramFiles\Vivaldi\Application\vivaldi.exe",
+                    "$env:ProgramFiles(x86)\Vivaldi\Application\vivaldi.exe"
+                );
+                CacheDirs = @(
+                    "$env:LOCALAPPDATA\Vivaldi\User Data\*\Cache",
+                    "$env:LOCALAPPDATA\Vivaldi\User Data\*\Code Cache",
+                    "$env:LOCALAPPDATA\Vivaldi\User Data\*\GPUCache"
+                )
+            };
+            "Mozilla Firefox" = @{
+                InstallPaths = @(
+                    "$env:ProgramFiles\Mozilla Firefox\firefox.exe",
+                    "$env:ProgramFiles(x86)\Mozilla Firefox\firefox.exe"
+                );
+                CacheDirs = @() # Handled separately
+            }
+        }
+    
+        foreach ($browserName in $browserCacheConfigs.Keys) {
+            $config = $browserCacheConfigs[$browserName]
+            $isBrowserInstalled = $false
             
-            $foundPaths = New-Object System.Collections.Generic.List[string]
-
-            foreach ($name in ($potentialNames | Select-Object -Unique)) {
-                foreach ($root in $searchRoots) {
-                    $basePath = Join-Path -Path $root -ChildPath $name
-                    if (Test-Path $basePath) {
-                        foreach ($cacheName in $cacheFolderNames) {
-                            $cachePath = Join-Path -Path $basePath -ChildPath $cacheName
-                            if (Test-Path $cachePath) { $foundPaths.Add($cachePath) }
+            # Check if browser is installed
+            foreach ($installPath in $config.InstallPaths) {
+                if (Test-Path $installPath) {
+                    $isBrowserInstalled = $true
+                    break
+                }
+            }
+    
+            if ($isBrowserInstalled) {
+                $foundBrowserPaths = New-Object System.Collections.Generic.List[string]
+                
+                if ($browserName -eq "Mozilla Firefox") {
+                    # Special handling for Firefox profiles
+                    $ffProfileDirs = Get-ChildItem -Path "$env:APPDATA\Mozilla\Firefox\Profiles" -Directory -ErrorAction SilentlyContinue
+                    if ($ffProfileDirs) {
+                        $ffProfileDirs | ForEach-Object {
+                            $cachePaths = @(
+                                "$($_.FullName)\cache2",
+                                "$($_.FullName)\startupCache",
+                                "$($_.FullName)\offlineCache"
+                            )
+                            foreach ($cachePath in $cachePaths) {
+                                if (Test-Path $cachePath) {
+                                    $size = (Get-ChildItem $cachePath -Recurse -Force -ErrorAction SilentlyContinue | 
+                                            Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                                    if ($size -gt 0) {
+                                        [void]$foundBrowserPaths.Add($cachePath)
+                                        Write-LogAndHost "Found Firefox cache at $cachePath (Size: $([math]::Round($size/1MB, 2)) MB)" -NoHost
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    # For Chromium-based browsers - resolve wildcards
+                    foreach ($cacheDir in $config.CacheDirs) {
+                        try {
+                            $resolvedPaths = Resolve-Path $cacheDir -ErrorAction SilentlyContinue
+                            if ($resolvedPaths) {
+                                foreach ($path in $resolvedPaths) {
+                                    if (Test-Path $path -PathType Container) {
+                                        $size = (Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue | 
+                                                Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                                        if ($size -gt 0) {
+                                            [void]$foundBrowserPaths.Add($path.Path)
+                                            Write-LogAndHost "Found $browserName cache at $($path.Path) (Size: $([math]::Round($size/1MB, 2)) MB)" -NoHost
+                                        }
+                                    }
+                                }
+                            }
+                        } catch {}
+                    }
+                }
+    
+                if ($foundBrowserPaths.Count -gt 0) {
+                    $uniquePaths = $foundBrowserPaths | Select-Object -Unique
+                    $result.ApplicationCaches[$browserName + " Cache"] = @{ Paths = $uniquePaths; Type = 'Folder' }
+                    [void]$processedApps.Add($browserName)
+                }
+            }
+        }
+    
+        # --- Enhanced registry scanning for other applications ---
+        Write-LogAndHost "Scanning registry for other installed applications..." -NoHost
+        $uninstallPaths = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKCU:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        )
+        
+        # Extended list of cache folder names
+        $cacheFolderNames = @(
+            "Cache", "cache", "Code Cache", "GPUCache", "ShaderCache", 
+            "temp", "tmp", "logs", "Logs", "CrashDumps", "dumps", 
+            "Blob Storage", "blob_storage", "Local Storage", "localstorage", 
+            "IndexedDB", "databases", "Service Worker", "ServiceWorker", 
+            "Application Cache", "appcache", "offlineCache"
+        )
+        
+        # Extended search roots
+        $searchRoots = @($env:LOCALAPPDATA, $env:APPDATA, $env:ProgramData, "$env:ProgramFiles", "${env:ProgramFiles(x86)}")
+    
+        foreach ($path in $uninstallPaths) {
+            $regKeys = Get-ChildItem -Path $path -ErrorAction SilentlyContinue
+            if (-not $regKeys) { continue }
+    
+            foreach ($key in $regKeys) {
+                $appName = $key.GetValue("DisplayName")
+                $publisher = $key.GetValue("Publisher")
+                $installLocation = $key.GetValue("InstallLocation")
+    
+                if ([string]::IsNullOrWhiteSpace($appName) -or $appName -match "^KB[0-9]{6,}$" -or $processedApps.Contains($appName)) { 
+                    continue 
+                }
+                [void]$processedApps.Add($appName)
+    
+                $potentialNames = New-Object System.Collections.Generic.List[string]
+                $potentialNames.Add($appName)
+                if (-not [string]::IsNullOrWhiteSpace($publisher)) { 
+                    $potentialNames.Add($publisher) 
+                }
+                
+                # Also check install location for caches
+                if (-not [string]::IsNullOrWhiteSpace($installLocation) -and (Test-Path $installLocation)) {
+                    $potentialNames.Add($installLocation)
+                }
+                
+                $foundPaths = New-Object System.Collections.Generic.List[string]
+    
+                foreach ($name in ($potentialNames | Select-Object -Unique)) {
+                    foreach ($root in $searchRoots) {
+                        # Handle both direct paths and publisher subfolders
+                        $basePath = Join-Path -Path $root -ChildPath $name
+                        if (Test-Path $basePath) {
+                            foreach ($cacheName in $cacheFolderNames) {
+                                $cachePath = Join-Path -Path $basePath -ChildPath $cacheName
+                                if (Test-Path $cachePath) {
+                                    $size = (Get-ChildItem $cachePath -Recurse -Force -ErrorAction SilentlyContinue | 
+                                            Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                                    if ($size -gt 0) {
+                                        $foundPaths.Add($cachePath)
+                                        Write-LogAndHost "Found cache for '$appName' at $cachePath (Size: $([math]::Round($size/1MB, 2)) MB)" -NoHost
+                                    }
+                                }
+                            }
+                        }
+                        
+                        # Also check for app-specific cache folders directly in root
+                        $appCachePath = Join-Path -Path $root -ChildPath "$name\Cache"
+                        if (Test-Path $appCachePath) {
+                            $size = (Get-ChildItem $appCachePath -Recurse -Force -ErrorAction SilentlyContinue | 
+                                    Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                            if ($size -gt 0) {
+                                $foundPaths.Add($appCachePath)
+                                Write-LogAndHost "Found cache for '$appName' at $appCachePath (Size: $([math]::Round($size/1MB, 2)) MB)" -NoHost
+                            }
                         }
                     }
                 }
-            }
-            
-            if ($foundPaths.Count -gt 0) {
-                $uniquePaths = $foundPaths | Select-Object -Unique
-                Write-LogAndHost "Found potential cache for '$appName': $($uniquePaths -join ', ')" -NoHost
-                $discoveredCaches[$appName] = @{ Paths = $uniquePaths; Type = 'Folder' }
+                
+                if ($foundPaths.Count -gt 0) {
+                    $uniquePaths = $foundPaths | Select-Object -Unique
+                    $result.ApplicationCaches[$appName] = @{ Paths = $uniquePaths; Type = 'Folder' }
+                }
             }
         }
+        
+        # --- Additional system-wide cache locations (removed Startup and Temp) ---
+        Write-LogAndHost "Scanning for additional system cache locations..." -NoHost
+        # Note: Removed Startup and Temp folders to avoid duplication
+        # Temp folders are now handled by "Windows Temporary Files"
+        # Startup folders are not included as they typically don't contain significant cache files
+        
+        Write-LogAndHost "Finished cache scan. Found $($result.ApplicationCaches.Count) application caches and $($result.SystemCaches.Count) system caches." -NoHost
+        return $result
     }
-    
-    Write-LogAndHost "Finished cache scan. Found $($discoveredCaches.Count) applications with potential caches." -NoHost
-    return $discoveredCaches
-}
 
-# ENHANCED FUNCTION: Clean temporary system files with a GUI, with consolidated dynamic cache discovery and path tooltips.
-function Invoke-TempFileCleanup {
+    # Main function body
     if (-not $script:guiAvailable) {
         Write-LogAndHost "GUI is not available, cannot launch the System Cleanup tool." -HostColor Red -LogPrefix "Invoke-TempFileCleanup"
         Start-Sleep -Seconds 2
@@ -983,15 +1080,14 @@ function Invoke-TempFileCleanup {
     }
     Write-LogAndHost "Launching System Cleanup GUI..." -HostColor Cyan
 
-    # --- DATA STRUCTURE for all cleanup items ---
-    # Added DNS Cache and Microsoft Store Cache for more thorough cleaning.
+    # --- Enhanced DATA STRUCTURE for all cleanup items ---
     $cleanupItems = [ordered]@{
         "System Items" = [ordered]@{
-            "Windows Temporary Files" = @{ Paths = @("$env:TEMP", "$env:windir\Temp"); Type = 'Folder' }
-            "Windows Update Cache"    = @{ Paths = @("$env:windir\SoftwareDistribution\Download"); Type = 'Folder' }
+            "Windows Temporary Files" = @{ Paths = @("$env:TEMP", "$env:windir\Temp", "$env:ProgramData\Temp"); Type = 'Folder' }
+            "Windows Update Cache"    = @{ Paths = @("$env:windir\SoftwareDistribution\Download", "$env:windir\SoftwareDistribution\DataStore"); Type = 'Folder' }
             "Delivery Optimization"   = @{ Paths = @("$env:windir\SoftwareDistribution\DeliveryOptimization"); Type = 'Folder' }
-            "Windows Log Files"       = @{ Paths = @("$env:windir\Logs"); Type = 'Folder' }
-            "System Minidump Files"   = @{ Paths = @("$env:windir\Minidump"); Type = 'Folder' }
+            "Windows Log Files"       = @{ Paths = @("$env:windir\Logs", "$env:windir\Logs\CBS"); Type = 'Folder' }
+            "System Minidump Files"   = @{ Paths = @("$env:windir\Minidump", "$env:LOCALAPPDATA\CrashDumps"); Type = 'Folder' }
             "Windows Prefetch Files"  = @{ Paths = @("$env:windir\Prefetch"); Type = 'Folder' }
             "Thumbnail Cache"         = @{ Path = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"; Filter = "thumbcache_*.db"; Type = 'File' }
             "Windows Icon Cache"      = @{ Path = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"; Filter = "iconcache_*.db"; Type = 'File' }
@@ -999,14 +1095,33 @@ function Invoke-TempFileCleanup {
             "Microsoft Store Cache"   = @{ Paths = @("$env:LOCALAPPDATA\Packages\Microsoft.WindowsStore_8wekyb3d8bbwe\LocalCache"); Type = 'Folder' }
             "DNS Cache"               = @{ Type = 'Special' }
             "Recycle Bin"             = @{ Type = 'Special' }
+            "Windows Error Reporting" = @{ Paths = @("$env:ProgramData\Microsoft\Windows\WER", "$env:LOCALAPPDATA\CrashDumps"); Type = 'Folder' }
+            "Windows Search Data"     = @{ Paths = @("$env:ProgramData\Microsoft\Search\Data"); Type = 'Folder' }
+            "Windows Defender History"= @{ Paths = @("$env:ProgramData\Microsoft\Windows Defender\Scans\History"); Type = 'Folder' }
+            "Temporary Internet Files"= @{ Paths = @("$env:LOCALAPPDATA\Microsoft\Windows\INetCache"); Type = 'Folder' }
+            "Windows Metro Apps Cache"= @{ 
+                Paths = @(
+                    "$env:LOCALAPPDATA\Packages\*\AC\INetCache",
+                    "$env:LOCALAPPDATA\Packages\*\TempState",
+                    "$env:LOCALAPPDATA\Packages\*\LocalCache"
+                ); 
+                Type = 'Folder' 
+            }
+            "Windows Upgrade Log Files" = @{ Paths = @("$env:windir\Panther"); Type = 'Folder' }
         }
-        "Discovered Application Caches" = [ordered]@{} # Category for all discovered app caches, including browsers.
+        "Discovered Application Caches" = [ordered]@{}
     }
 
     # --- GUI Setup ---
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Perdanga System Cleanup"; $form.Size = New-Object System.Drawing.Size(600, 720) # Increased height for new controls
-    $form.StartPosition = "CenterScreen"; $form.FormBorderStyle = "FixedDialog"; $form.MaximizeBox = $false
+    $form.Text = "Perdanga System Cleanup"
+    $form.Size = New-Object System.Drawing.Size(600, 720)
+    $form.StartPosition = "CenterScreen"
+    $form.FormBorderStyle = "FixedDialog"
+    $form.MaximizeBox = $false
     $form.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
 
     $commonFont = New-Object System.Drawing.Font("Segoe UI", 10)
@@ -1015,89 +1130,201 @@ function Invoke-TempFileCleanup {
 
     # --- ToolTip Setup for displaying paths ---
     $toolTip = New-Object System.Windows.Forms.ToolTip
-    $toolTip.AutoPopDelay = 20000; $toolTip.InitialDelay = 700; $toolTip.ReshowDelay = 500
-    $toolTip.UseFading = $true; $toolTip.UseAnimation = $true
+    $toolTip.AutoPopDelay = 20000
+    $toolTip.InitialDelay = 700
+    $toolTip.ReshowDelay = 500
+    $toolTip.UseFading = $true
+    $toolTip.UseAnimation = $true
 
     # --- TreeView Setup ---
     $treeView = New-Object System.Windows.Forms.TreeView
-    $treeView.Location = New-Object System.Drawing.Point(15, 55); $treeView.Size = New-Object System.Drawing.Size(560, 360) # Repositioned
-    $treeView.CheckBoxes = $true; $treeView.Font = $commonFont; $treeView.BackColor = $controlBackColor
-    $treeView.ForeColor = $controlForeColor; $treeView.BorderStyle = "FixedSingle"; $treeView.FullRowSelect = $true
+    $treeView.Location = New-Object System.Drawing.Point(15, 55)
+    $treeView.Size = New-Object System.Drawing.Size(560, 360)
+    $treeView.CheckBoxes = $true
+    $treeView.Font = $commonFont
+    $treeView.BackColor = $controlBackColor
+    $treeView.ForeColor = $controlForeColor
+    $treeView.BorderStyle = "FixedSingle"
+    $treeView.FullRowSelect = $true
     $treeView.ShowNodeToolTips = $false
     $form.Controls.Add($treeView) | Out-Null
 
-    # --- Populate TreeView with static items ---
+    # --- Populate TreeView with static items (only if they have content) ---
     foreach ($categoryName in $cleanupItems.Keys) {
         $parentNode = $treeView.Nodes.Add($categoryName, $categoryName)
-        if ($categoryName -ne "Discovered Application Caches") {
+        if ($categoryName -eq "System Items") {
             foreach ($itemName in $cleanupItems[$categoryName].Keys) {
                 $itemConfig = $cleanupItems[$categoryName][$itemName]
-                if ($itemConfig.Type -eq 'Folder' -and $itemConfig.Paths.Count -eq 0) { continue }
-                $childNode = $parentNode.Nodes.Add($itemName, $itemName); $childNode.Tag = $itemConfig
-                $childNode.Checked = $false 
+                
+                # Skip folder items with no paths
+                if ($itemConfig.Type -eq 'Folder' -and $itemConfig.Paths.Count -eq 0) { 
+                    continue 
+                }
+                
+                $addItem = $false
+                
+                if ($itemConfig.Type -eq 'Folder') {
+                    # Special case: Windows Metro Apps Cache - always add (will be checked during analysis)
+                    if ($itemName -eq "Windows Metro Apps Cache") {
+                        $addItem = $true
+                    } else {
+                        $hasContent = $false
+                        foreach ($path in $itemConfig.Paths) {
+                            if (Test-Path $path -PathType Container) {
+                                # Check if the folder has any files or subfolders with content
+                                $items = Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue
+                                if ($items) {
+                                    $size = ($items | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+                                    if ($size -gt 0) {
+                                        $hasContent = $true
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                        $addItem = $hasContent
+                    }
+                }
+                elseif ($itemConfig.Type -eq 'File') {
+                    $filePath = Join-Path $itemConfig.Path $itemConfig.Filter
+                    if (Test-Path $filePath) {
+                        $file = Get-Item $filePath -Force -ErrorAction SilentlyContinue
+                        if ($file.Length -gt 0) {
+                            $addItem = $true
+                        }
+                    }
+                }
+                elseif ($itemConfig.Type -eq 'Special') {
+                    $addItem = $true
+                }
+                
+                if ($addItem) {
+                    $childNode = $parentNode.Nodes.Add($itemName, $itemName)
+                    $childNode.Tag = $itemConfig
+                    $childNode.Checked = $false 
+                }
             }
-            $parentNode.Checked = $false; $parentNode.Expand()
+            $parentNode.Checked = $false
+            if ($parentNode.Nodes.Count -gt 0) {
+                $parentNode.Expand()
+            }
         }
     }
 
     # --- Log Box Setup ---
     $logBox = New-Object System.Windows.Forms.RichTextBox
-    $logBox.Location = New-Object System.Drawing.Point(15, 455); $logBox.Size = New-Object System.Drawing.Size(560, 150) # Repositioned
-    $logBox.Font = New-Object System.Drawing.Font("Consolas", 9); $logBox.BackColor = $controlBackColor; $logBox.ForeColor = $controlForeColor
-    $logBox.ReadOnly = $true; $logBox.BorderStyle = "FixedSingle"; $logBox.ScrollBars = "Vertical"
+    $logBox.Location = New-Object System.Drawing.Point(15, 455)
+    $logBox.Size = New-Object System.Drawing.Size(560, 150)
+    $logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
+    $logBox.BackColor = $controlBackColor
+    $logBox.ForeColor = $controlForeColor
+    $logBox.ReadOnly = $true
+    $logBox.BorderStyle = "FixedSingle"
+    $logBox.ScrollBars = "Vertical"
     $form.Controls.Add($logBox) | Out-Null
     
     # --- Progress Bar Setup ---
     $progressBar = New-Object System.Windows.Forms.ProgressBar
-    $progressBar.Location = New-Object System.Drawing.Point(15, 425); $progressBar.Size = New-Object System.Drawing.Size(560, 20) # Repositioned
+    $progressBar.Location = New-Object System.Drawing.Point(15, 425)
+    $progressBar.Size = New-Object System.Drawing.Size(560, 20)
     $progressBar.Visible = $false
     $form.Controls.Add($progressBar) | Out-Null
 
     # --- Button Setup ---
-    $buttonAnalyze = New-Object System.Windows.Forms.Button; $buttonAnalyze.Text = "Analyze"; $buttonAnalyze.Size = "120,30"; $buttonAnalyze.Location = "100,625"; # Repositioned
-    $buttonClean = New-Object System.Windows.Forms.Button; $buttonClean.Text = "Clean"; $buttonClean.Size = "120,30"; $buttonClean.Location = "235,625"; # Repositioned
-    $buttonClose = New-Object System.Windows.Forms.Button; $buttonClose.Text = "Exit"; $buttonClose.Size = "120,30"; $buttonClose.Location = "370,625"; # Repositioned
+    $buttonAnalyze = New-Object System.Windows.Forms.Button
+    $buttonAnalyze.Text = "Analyze"
+    $buttonAnalyze.Size = "120,30"
+    $buttonAnalyze.Location = "100,625"
+    
+    $buttonClean = New-Object System.Windows.Forms.Button
+    $buttonClean.Text = "Clean"
+    $buttonClean.Size = "120,30"
+    $buttonClean.Location = "235,625"
+    
+    $buttonClose = New-Object System.Windows.Forms.Button
+    $buttonClose.Text = "Exit"
+    $buttonClose.Size = "120,30"
+    $buttonClose.Location = "370,625"
     
     # --- Select/Deselect All Buttons ---
-    $buttonSelectAll = New-Object System.Windows.Forms.Button; $buttonSelectAll.Text = "Select All"; $buttonSelectAll.Size = "120,30"; $buttonSelectAll.Location = "15,15";
-    $buttonDeselectAll = New-Object System.Windows.Forms.Button; $buttonDeselectAll.Text = "Deselect All"; $buttonDeselectAll.Size = "120,30"; $buttonDeselectAll.Location = "145,15";
+    $buttonSelectAll = New-Object System.Windows.Forms.Button
+    $buttonSelectAll.Text = "Select All"
+    $buttonSelectAll.Size = "120,30"
+    $buttonSelectAll.Location = "15,15"
+    
+    $buttonDeselectAll = New-Object System.Windows.Forms.Button
+    $buttonDeselectAll.Text = "Deselect All"
+    $buttonDeselectAll.Size = "120,30"
+    $buttonDeselectAll.Location = "145,15"
     
     @( $buttonAnalyze, $buttonClean, $buttonClose, $buttonSelectAll, $buttonDeselectAll ) | ForEach-Object {
-        $_.Font = $commonFont; $_.ForeColor = [System.Drawing.Color]::White; $_.FlatStyle = "Flat"; $_.FlatAppearance.BorderSize = 0; $form.Controls.Add($_) | Out-Null
+        $_.Font = $commonFont
+        $_.ForeColor = [System.Drawing.Color]::White
+        $_.FlatStyle = "Flat"
+        $_.FlatAppearance.BorderSize = 0
+        $form.Controls.Add($_) | Out-Null
     }
-    $buttonAnalyze.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180); $buttonClean.BackColor = [System.Drawing.Color]::FromArgb(200, 70, 70); $buttonClose.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
-    $buttonSelectAll.BackColor = [System.Drawing.Color]::FromArgb(80, 150, 80); $buttonDeselectAll.BackColor = [System.Drawing.Color]::FromArgb(150, 80, 80)
+    
+    $buttonAnalyze.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180)
+    $buttonClean.BackColor = [System.Drawing.Color]::FromArgb(200, 70, 70)
+    $buttonClose.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
+    $buttonSelectAll.BackColor = [System.Drawing.Color]::FromArgb(80, 150, 80)
+    $buttonDeselectAll.BackColor = [System.Drawing.Color]::FromArgb(150, 80, 80)
     
     # --- Event Handlers & Logic ---
     $analyzedData = @{}
-    $logWriter = { param($Message, $Color = 'White'); $logBox.SelectionStart = $logBox.TextLength; $logBox.SelectionLength = 0; $logBox.SelectionColor = $Color; $logBox.AppendText("$(Get-Date -Format 'HH:mm:ss') - $Message`n"); $logBox.ScrollToCaret() }
+    $logWriter = { 
+        param($Message, $Color = 'White')
+        $logBox.SelectionStart = $logBox.TextLength
+        $logBox.SelectionLength = 0
+        $logBox.SelectionColor = $Color
+        $logBox.AppendText("$(Get-Date -Format 'HH:mm:ss') - $Message`n")
+        $logBox.ScrollToCaret()
+    }
     $form.Tag = @{ logWriter = $logWriter }
 
     # --- DYNAMICALLY FIND AND POPULATE APP CACHES ---
     $form.Add_Shown({
         $logWriterFunc = $form.Tag.logWriter
-        & $logWriterFunc "Scanning for application caches (this may take a moment)..." 'LightBlue'; $form.Update()
+        & $logWriterFunc "Scanning for caches (this may take a moment)..." 'LightBlue'
+        $form.Update()
 
-        $dynamicCaches = Find-DynamicAppCaches
-        $discoveredNode = $treeView.Nodes["Discovered Application Caches"]
+        $discoveredCaches = Find-DynamicAppCaches
+        $appCacheNode = $treeView.Nodes["Discovered Application Caches"]
+        $systemItemsNode = $treeView.Nodes["System Items"]
 
-        if ($dynamicCaches.Count -gt 0) {
-            $treeView.BeginUpdate()
-            foreach ($appName in ($dynamicCaches.Keys | Sort-Object)) {
-                $itemConfig = $dynamicCaches[$appName]
+        $treeView.BeginUpdate()
+        
+        # Populate Application Caches
+        if ($discoveredCaches.ApplicationCaches.Count -gt 0) {
+            foreach ($appName in ($discoveredCaches.ApplicationCaches.Keys | Sort-Object)) {
+                $itemConfig = $discoveredCaches.ApplicationCaches[$appName]
                 $cleanupItems["Discovered Application Caches"][$appName] = $itemConfig
-                $childNode = $discoveredNode.Nodes.Add($appName, $appName)
+                $childNode = $appCacheNode.Nodes.Add($appName, $appName)
                 $childNode.Tag = $itemConfig
                 $childNode.Checked = $false 
+                
+                # Add size info to node text if available
+                if ($itemConfig.Size) {
+                    $sizeText = " ($([math]::Round($itemConfig.Size/1MB, 2)) MB)"
+                    $childNode.Text = $appName + $sizeText
+                }
             }
-            $discoveredNode.Expand(); $treeView.EndUpdate()
-            $discoveredNode.Checked = $false 
-            & $logWriterFunc "Scan complete. Found $($dynamicCaches.Count) items. Review and select them for cleaning." 'Green'
+            $appCacheNode.Expand()
+            $appCacheNode.Checked = $false 
         } else {
-            & $logWriterFunc "No additional application caches were found." 'Gray'
-            $treeView.Nodes.Remove($discoveredNode)
+            $treeView.Nodes.Remove($appCacheNode)
         }
-        # FIX: Ensure the view is scrolled to the top after loading.
+        
+        # Note: System caches are no longer discovered to avoid duplication
+        # All system items are now predefined in the "System Items" section
+        
+        $treeView.EndUpdate()
+        
+        $appCount = $discoveredCaches.ApplicationCaches.Count
+        & $logWriterFunc "Scan complete. Found $appCount application caches. Review and select them for cleaning." 'Green'
+        
+        # Ensure the view is scrolled to the top after loading
         if ($treeView.Nodes.Count -gt 0) {
             $treeView.SelectedNode = $treeView.Nodes[0]
             $treeView.Nodes[0].EnsureVisible()
@@ -1135,8 +1362,11 @@ function Invoke-TempFileCleanup {
                 foreach ($childNode in $e.Node.Nodes) { $childNode.Checked = $e.Node.Checked }
             } else { # Child node was clicked
                 $parent = $e.Node.Parent
-                $allChecked = $true; $noneChecked = $true
-                foreach ($sibling in $parent.Nodes) { if ($sibling.Checked) { $noneChecked = $false } else { $allChecked = $false } }
+                $allChecked = $true
+                $noneChecked = $true
+                foreach ($sibling in $parent.Nodes) { 
+                    if ($sibling.Checked) { $noneChecked = $false } else { $allChecked = $false } 
+                }
                 if ($allChecked) { $parent.Checked = $true } elseif ($noneChecked) { $parent.Checked = $false } else { $parent.Checked = $false }
             }
         } finally {
@@ -1145,12 +1375,25 @@ function Invoke-TempFileCleanup {
     })
 
     # --- Button Click Handlers ---
-    $buttonSelectAll.add_Click({ foreach ($node in $treeView.Nodes) { $node.Checked = $true } }) | Out-Null
-    $buttonDeselectAll.add_Click({ foreach ($node in $treeView.Nodes) { $node.Checked = $false } }) | Out-Null
+    $buttonSelectAll.add_Click({ 
+        foreach ($node in $treeView.Nodes) { 
+            $node.Checked = $true 
+        } 
+    }) | Out-Null
+    
+    $buttonDeselectAll.add_Click({ 
+        foreach ($node in $treeView.Nodes) { 
+            $node.Checked = $false 
+        } 
+    }) | Out-Null
 
     $buttonAnalyze.add_Click({
-        $logBox.Clear(); & $logWriter "Starting analysis..." 'Cyan'; $analyzedData.Clear()
-        $progressBar.Value = 0; $progressBar.Visible = $true; $form.Update()
+        $logBox.Clear()
+        & $logWriter "Starting analysis..." 'Cyan'
+        $analyzedData.Clear()
+        $progressBar.Value = 0
+        $progressBar.Visible = $true
+        $form.Update()
         
         $nodesToAnalyze = @()
         foreach ($parentNode in $treeView.Nodes) {
@@ -1158,25 +1401,43 @@ function Invoke-TempFileCleanup {
                 if ($childNode.Checked) { $nodesToAnalyze += $childNode }
             }
         }
-        if ($nodesToAnalyze.Count -eq 0) { & $logWriter "No items selected for analysis." 'Yellow'; $progressBar.Visible = $false; return }
+        if ($nodesToAnalyze.Count -eq 0) { 
+            & $logWriter "No items selected for analysis." 'Yellow'
+            $progressBar.Visible = $false
+            return 
+        }
 
         $progressBar.Maximum = $nodesToAnalyze.Count
         $treeView.BeginUpdate()
         $totalSize = 0
         
         foreach ($childNode in $nodesToAnalyze) {
-            $itemConfig = $childNode.Tag; $itemSize = 0
+            $itemConfig = $childNode.Tag
+            $itemSize = 0
             switch ($itemConfig.Type) {
-                'Folder' { foreach ($p in $itemConfig.Paths) { if(Test-Path $p){ $itemSize += (Get-ChildItem $p -Recurse -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum } } }
-                'File' { if(Test-Path $itemConfig.Path){ $itemSize = (Get-ChildItem $itemConfig.Path -Filter $itemConfig.Filter -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum } }
+                'Folder' { 
+                    foreach ($p in $itemConfig.Paths) {
+                        if(Test-Path $p) {
+                            $itemSize += (Get-ChildItem $p -Recurse -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum 
+                        } 
+                    } 
+                }
+                'File' { 
+                    if(Test-Path $itemConfig.Path) {
+                        $itemSize = (Get-ChildItem $itemConfig.Path -Filter $itemConfig.Filter -Force -EA SilentlyContinue | Measure-Object -Property Length -Sum -EA SilentlyContinue).Sum 
+                    } 
+                }
                 'Special' { 
                     if ($childNode.Name -eq "Recycle Bin") {
-                        $shell = New-Object -ComObject Shell.Application; $recycleBin = $shell.NameSpace(0xA); $itemSize = ($recycleBin.Items() | ForEach-Object { $_.Size } | Measure-Object -Sum).Sum 
+                        $shell = New-Object -ComObject Shell.Application
+                        $recycleBin = $shell.NameSpace(0xA)
+                        $itemSize = ($recycleBin.Items() | ForEach-Object { $_.Size } | Measure-Object -Sum).Sum 
                     }
                     # Special items like DNS cache have no size to measure.
                 }
             }
-            $analyzedData[$childNode.Name] = $itemSize; $totalSize += $itemSize
+            $analyzedData[$childNode.Name] = $itemSize
+            $totalSize += $itemSize
             $baseNodeName = $childNode.Name -replace " \(\d+(\.\d+)? (MB|KB)\)$"
             $nodeSizeText = if ($itemSize -gt 1MB) { " ($([math]::Round($itemSize/1MB, 2)) MB)" } elseif ($itemSize -gt 0) { " ($([math]::Round($itemSize/1KB, 2)) KB)" } else { "" }
             $childNode.Text = $baseNodeName + $nodeSizeText
@@ -1189,13 +1450,22 @@ function Invoke-TempFileCleanup {
     })
 
     $buttonClean.add_Click({
-        if ($analyzedData.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Please run an analysis first.", "Analysis Required", "OK", "Information") | Out-Null; return }
+        if ($analyzedData.Count -eq 0) { 
+            [System.Windows.Forms.MessageBox]::Show("Please run an analysis first.", "Analysis Required", "OK", "Information") | Out-Null
+            return 
+        }
+        
         $confirmResult = [System.Windows.Forms.MessageBox]::Show("Are you sure you want to permanently delete these files?", "Confirm Deletion", "YesNo", "Warning")
-        if ($confirmResult -ne 'Yes') { & $logWriter "Cleanup cancelled by user." 'Yellow'; return }
+        if ($confirmResult -ne 'Yes') { 
+            & $logWriter "Cleanup cancelled by user." 'Yellow'
+            return 
+        }
         
         & $logWriter "Starting cleanup..." 'Cyan'
-        $progressBar.Value = 0; $progressBar.Visible = $true
-        @( $buttonAnalyze, $buttonClean, $buttonSelectAll, $buttonDeselectAll ) | ForEach-Object { $_.Enabled = $false }; $form.Update()
+        $progressBar.Value = 0
+        $progressBar.Visible = $true
+        @( $buttonAnalyze, $buttonClean, $buttonSelectAll, $buttonDeselectAll ) | ForEach-Object { $_.Enabled = $false }
+        $form.Update()
         
         $nodesToClean = @()
         foreach ($parentNode in $treeView.Nodes) {
@@ -1212,17 +1482,37 @@ function Invoke-TempFileCleanup {
             $itemConfig = $childNode.Tag
             try {
                 switch ($itemConfig.Type) {
-                    'Folder' { foreach ($p in $itemConfig.Paths) { if (Test-Path $p) { Remove-Item -Path "$p\*" -Recurse -Force -EA SilentlyContinue } } }
-                    'File' { if (Test-Path $itemConfig.Path) { Remove-Item -Path (Join-Path $itemConfig.Path $itemConfig.Filter) -Force -EA SilentlyContinue } }
+                    'Folder' { 
+                        foreach ($p in $itemConfig.Paths) { 
+                            if (Test-Path $p) { 
+                                # Enhanced folder cleanup with wildcard support
+                                $itemsToRemove = Get-ChildItem -Path $p -Recurse -Force -ErrorAction SilentlyContinue
+                                if ($itemsToRemove) {
+                                    Remove-Item -Path $itemsToRemove.FullName -Recurse -Force -ErrorAction SilentlyContinue
+                                }
+                            } 
+                        } 
+                    }
+                    'File' { 
+                        if (Test-Path $itemConfig.Path) { 
+                            Remove-Item -Path (Join-Path $itemConfig.Path $itemConfig.Filter) -Force -ErrorAction SilentlyContinue 
+                        } 
+                    }
                     'Special' { 
-                        if ($baseNodeName -eq "Recycle Bin") { Clear-RecycleBin -Force -ErrorAction Stop }
-                        if ($baseNodeName -eq "DNS Cache") { Start-Process -FilePath "ipconfig" -ArgumentList "/flushdns" -WindowStyle Hidden -Wait }
+                        if ($baseNodeName -eq "Recycle Bin") { 
+                            Clear-RecycleBin -Force -ErrorAction SilentlyContinue 
+                        }
+                        if ($baseNodeName -eq "DNS Cache") { 
+                            Start-Process -FilePath "ipconfig" -ArgumentList "/flushdns" -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue 
+                        }
                     }
                 }
                 if ($analyzedData.ContainsKey($childNode.Name)) {
                     $totalDeleted += $analyzedData[$childNode.Name]
                 }
-            } catch { & $logWriter "Failed to clean $($baseNodeName). Error: $($_.Exception.Message)" 'Red' }
+            } catch { 
+                & $logWriter "Failed to clean $($baseNodeName). Error: $($_.Exception.Message)" 'Red' 
+            }
             $progressBar.PerformStep()
         }
         
@@ -1230,19 +1520,30 @@ function Invoke-TempFileCleanup {
         & $logWriter "Cleanup complete. Freed approximately $deletedInMB MB of space." 'Green'
         & $logWriter "Perdanga Forever!" 'Magenta'
         
-        $analyzedData.Clear(); $progressBar.Visible = $false
+        $analyzedData.Clear()
+        $progressBar.Visible = $false
         @( $buttonAnalyze, $buttonClean, $buttonSelectAll, $buttonDeselectAll ) | ForEach-Object { $_.Enabled = $true }
         
         foreach ($node in $treeView.Nodes) { 
             $node.Text = $node.Name -replace " \(\d+(\.\d+)? (MB|KB)\)$"
-            foreach($child in $node.Nodes) { $child.Text = $child.Name -replace " \(\d+(\.\d+)? (MB|KB)\)$" } 
+            foreach($child in $node.Nodes) { 
+                $child.Text = $child.Name -replace " \(\d+(\.\d+)? (MB|KB)\)$" 
+            } 
         }
     })
 
     $buttonClose.add_Click({ $form.Close() }) | Out-Null
 
-    try { $null = $form.ShowDialog() } catch { Write-LogAndHost "An unexpected error occurred with the System Cleanup GUI. Details: $($_.Exception.Message)" -HostColor Red } finally { $form.Dispose() }
-    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host
+    try { 
+        $null = $form.ShowDialog() 
+    } catch { 
+        Write-LogAndHost "An unexpected error occurred with the System Cleanup GUI. Details: $($_.Exception.Message)" -HostColor Red 
+    } finally { 
+        $form.Dispose() 
+    }
+    
+    Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+    $null = Read-Host
 }
 
 # ENHANCED FUNCTION: Create a detailed autounattend.xml file via GUI with regional settings and tooltips.
@@ -2448,6 +2749,3 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
-
-
-
