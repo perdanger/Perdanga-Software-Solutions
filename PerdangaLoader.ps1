@@ -342,365 +342,648 @@ function Show-SystemInfo {
         return
     }
 
-    # Use a Gemini-themed color for the launch message
     Write-LogAndHost "Launching System Information GUI..." -HostColor Cyan -LogPrefix "Show-SystemInfo"
     
-    # --- GUI Setup ---
-    $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Perdanga System Information"
-    $form.Size = New-Object System.Drawing.Size(900, 750)
-    $form.StartPosition = "CenterScreen"
-    $form.FormBorderStyle = "FixedDialog"
-    $form.MaximizeBox = $false
+    try {
+        # --- GUI Setup ---
+        $form = New-Object System.Windows.Forms.Form
+        $form.Text = "Perdanga System Information"
+        $form.Size = New-Object System.Drawing.Size(950, 750)
+        $form.StartPosition = "CenterScreen"
+        $form.FormBorderStyle = "FixedDialog"
+        $form.MaximizeBox = $false
 
-    # Gemini Theme Colors
-    # A palette inspired by the Gemini logo: Dark, Blue, Yellow
-    $geminiDarkBg = [System.Drawing.Color]::FromArgb(20, 20, 25)
-    $geminiPanelBg = [System.Drawing.Color]::FromArgb(35, 35, 40)
-    $geminiBlue = [System.Drawing.Color]::FromArgb(60, 100, 180)    # Muted Blue
-    $geminiYellow = [System.Drawing.Color]::FromArgb(230, 180, 50)  # Golden Yellow
-    $geminiAccent = [System.Drawing.Color]::FromArgb(0, 200, 255)   # Light Blue/Cyan accent for headers
-    $geminiGrayText = [System.Drawing.Color]::Gainsboro # Soft gray for labels
-    $geminiWhiteText = [System.Drawing.Color]::White    # White for values
+        # Gemini Theme Colors
+        $geminiDarkBg = [System.Drawing.Color]::FromArgb(20, 20, 25)
+        $geminiPanelBg = [System.Drawing.Color]::FromArgb(35, 35, 40)
+        $geminiBlue = [System.Drawing.Color]::FromArgb(60, 100, 180)
+        $geminiYellow = [System.Drawing.Color]::FromArgb(230, 180, 50)
+        $geminiAccent = [System.Drawing.Color]::FromArgb(0, 200, 255)
+        $geminiGrayText = [System.Drawing.Color]::Gainsboro
+        $geminiWhiteText = [System.Drawing.Color]::White
 
-    $form.BackColor = $geminiDarkBg
-    $form.Opacity = 0
-
-    # --- Control Styles ---
-    $commonFont = New-Object System.Drawing.Font("Segoe UI", 9)
-    $groupboxFont = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-    $labelColor = $geminiGrayText
-    $valueColor = $geminiWhiteText
-    
-    # --- Main Layout Panel ---
-    $mainTableLayout = New-Object System.Windows.Forms.TableLayoutPanel
-    $mainTableLayout.Dock = "Fill"
-    $mainTableLayout.ColumnCount = 2
-    $mainTableLayout.RowCount = 5 
-    $mainTableLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50))) | Out-Null
-    $mainTableLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50))) | Out-Null
-    $mainTableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 25))) | Out-Null
-    $mainTableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 25))) | Out-Null
-    $mainTableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 25))) | Out-Null
-    $mainTableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 25))) | Out-Null
-    $mainTableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 50))) | Out-Null
-    $mainTableLayout.BackColor = $geminiDarkBg
-    $form.Controls.Add($mainTableLayout)
-
-    # --- Helper function to create styled GroupBoxes with a unique color for each ---
-    function New-InfoGroupBox($Text, $HeaderColor) {
-        $groupbox = New-Object System.Windows.Forms.GroupBox
-        $groupbox.Text = $Text
-        $groupbox.Font = $groupboxFont
-        $groupbox.ForeColor = $HeaderColor
-        $groupbox.Dock = "Fill"
-        $groupbox.Padding = New-Object System.Windows.Forms.Padding(10, 20, 10, 10)
-        $groupbox.Margin = New-Object System.Windows.Forms.Padding(10)
-        $groupbox.BackColor = $geminiPanelBg # Consistent background for all info boxes
-
-        # Create a nested panel with AutoScroll to handle overflow
-        $scrollPanel = New-Object System.Windows.Forms.Panel
-        $scrollPanel.Dock = "Fill"
-        $scrollPanel.AutoScroll = $true
-        $scrollPanel.BackColor = $geminiPanelBg
-        $groupbox.Controls.Add($scrollPanel)
-
-        # Create a nested TableLayoutPanel for a clean, two-column layout
-        $tlp = New-Object System.Windows.Forms.TableLayoutPanel
-        $tlp.Dock = "Top"
-        $tlp.AutoSize = $true
-        $tlp.ColumnCount = 2
-        $tlp.BackColor = $geminiPanelBg
+        $form.BackColor = $geminiDarkBg
+        $form.Opacity = 0
         
-        # Modified column styles for proper alignment
-        $tlp.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
-        $tlp.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 100))) | Out-Null
-        
-        $scrollPanel.Controls.Add($tlp)
+        # --- Main Layout Panel ---
+        $mainTableLayout = New-Object System.Windows.Forms.TableLayoutPanel
+        $mainTableLayout.Dock = "Fill"
+        $mainTableLayout.ColumnCount = 2
+        $mainTableLayout.RowCount = 5 
+        $mainTableLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50))) | Out-Null
+        $mainTableLayout.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50))) | Out-Null
+        $mainTableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 25))) | Out-Null
+        $mainTableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 25))) | Out-Null
+        $mainTableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 25))) | Out-Null
+        $mainTableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 25))) | Out-Null
+        $mainTableLayout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Absolute, 60))) | Out-Null
+        $mainTableLayout.BackColor = $geminiDarkBg
+        $mainTableLayout.Padding = New-Object System.Windows.Forms.Padding(10)
+        $form.Controls.Add($mainTableLayout)
 
-        return $groupbox
-    }
+        # --- Define improved fonts ---
+        $headerFont = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+        $labelFont = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+        $valueFont = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+        $buttonFont = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
 
-    # --- Create all GroupBoxes with a more restricted, cohesive color palette ---
-    $gbOs = New-InfoGroupBox "Operating System" $geminiBlue
-    $gbCpu = New-InfoGroupBox "Processor" $geminiYellow
-    $gbRam = New-InfoGroupBox "Memory (RAM)" $geminiBlue
-    $gbHardware = New-InfoGroupBox "System Hardware" $geminiYellow
-    $gbGpu = New-InfoGroupBox "Video Card(s)" $geminiBlue
-    $gbNetwork = New-InfoGroupBox "Network Adapters" $geminiYellow
-    $gbDisk = New-InfoGroupBox "Disk Drives" $geminiBlue
+        # --- Helper function to create styled GroupBoxes ---
+        function New-InfoGroupBox($Text, $HeaderColor) {
+            $groupbox = New-Object System.Windows.Forms.GroupBox
+            $groupbox.Text = $Text
+            $groupbox.Font = $headerFont
+            $groupbox.ForeColor = $HeaderColor
+            $groupbox.Dock = "Fill"
+            $groupbox.Padding = New-Object System.Windows.Forms.Padding(8, 20, 8, 8)
+            $groupbox.Margin = New-Object System.Windows.Forms.Padding(6)
+            $groupbox.BackColor = $geminiPanelBg
 
-    # --- Add GroupBoxes to the layout ---
-    # Column 0 (Left)
-    $mainTableLayout.Controls.Add($gbOs, 0, 0)
-    $mainTableLayout.Controls.Add($gbCpu, 0, 1)
-    $mainTableLayout.Controls.Add($gbRam, 0, 2)
-    $mainTableLayout.Controls.Add($gbHardware, 0, 3)
+            # Create a nested panel with AutoScroll
+            $scrollPanel = New-Object System.Windows.Forms.Panel
+            $scrollPanel.Dock = "Fill"
+            $scrollPanel.AutoScroll = $true
+            $scrollPanel.BackColor = $geminiPanelBg
+            $scrollPanel.Padding = New-Object System.Windows.Forms.Padding(4)
+            $groupbox.Controls.Add($scrollPanel)
 
-    # Column 1 (Right)
-    $mainTableLayout.Controls.Add($gbGpu, 1, 0)
-    $mainTableLayout.Controls.Add($gbNetwork, 1, 1)
-    $mainTableLayout.Controls.Add($gbDisk, 1, 2)
-    $mainTableLayout.SetRowSpan($gbDisk, 2)
-    
-    # --- Button Panel ---
-    $buttonPanel = New-Object System.Windows.Forms.FlowLayoutPanel
-    $buttonPanel.Dock = "Fill"
-    $buttonPanel.FlowDirection = "LeftToRight"
-    $buttonPanel.Padding = New-Object System.Windows.Forms.Padding(10, 10, 0, 0)
-    $buttonPanel.BackColor = $geminiDarkBg
-    $mainTableLayout.SetColumnSpan($buttonPanel, 2)
-    $mainTableLayout.Controls.Add($buttonPanel, 0, 4)
-
-    # --- Helper function to create styled Buttons with a consistent theme ---
-    function New-ActionButton($Text, $BackColor) {
-        $button = New-Object System.Windows.Forms.Button
-        $button.Text = $Text
-        $button.Size = "130,30"
-        $button.Font = $commonFont
-        $button.ForeColor = $geminiWhiteText
-        $button.BackColor = $BackColor
-        $button.FlatStyle = "Flat"
-        $button.FlatAppearance.BorderSize = 0
-        return $button
-    }
-
-    $buttonCopy = New-ActionButton "Copy to Clipboard" $geminiYellow
-    $buttonRefresh = New-ActionButton "Refresh" $geminiBlue
-    
-    $buttonPanel.Controls.AddRange(@($buttonCopy, $buttonRefresh))
-
-    # --- Data Population Logic ---
-    $script:infoStore = @{} # Store raw data for clipboard
-    
-    function Update-SystemInfo {
-        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-        $script:infoStore.Clear()
-        
-        # Helper to create and add labels to a groupbox's inner TableLayoutPanel
-        $populateGroupBox = {
-            param($GroupBox, $Data)
-            $tlp = $GroupBox.Controls[0].Controls[0] # Get the nested TableLayoutPanel inside the scroll panel
-            $tlp.Controls.Clear()
-            $tlp.RowCount = 0
+            # Create a nested TableLayoutPanel
+            $tlp = New-Object System.Windows.Forms.TableLayoutPanel
+            $tlp.Dock = "Top"
+            $tlp.AutoSize = $true
+            $tlp.ColumnCount = 2
+            $tlp.BackColor = $geminiPanelBg
+            $tlp.Padding = New-Object System.Windows.Forms.Padding(4)
             
-            foreach ($item in $Data.GetEnumerator()) {
-                $label = New-Object System.Windows.Forms.Label; $label.Text = $item.Key; $label.Font = $commonFont; $label.ForeColor = $labelColor; $label.AutoSize = $true
-                $value = New-Object System.Windows.Forms.Label; $value.Text = $item.Value; $value.Font = $commonFont; $value.ForeColor = $valueColor; $value.AutoSize = $true
-                
-                $tlp.Controls.Add($label, 0, $tlp.RowCount)
-                $tlp.Controls.Add($value, 1, $tlp.RowCount)
-                
-                $tlp.RowCount += 1 # Increment the row count
-                $tlp.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
-            }
+            $tlp.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
+            $tlp.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 100))) | Out-Null
+            
+            $scrollPanel.Controls.Add($tlp)
+
+            return $groupbox
         }
-        
-        try {
-            # --- OS Information ---
-            $osData = [ordered]@{}
-            $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
-            $osData["Name:"] = $osInfo.Caption; $script:infoStore["OS Name"] = $osInfo.Caption
-            $osData["Version:"] = $osInfo.Version; $script:infoStore["OS Version"] = $osInfo.Version
-            $osData["Build:"] = $osInfo.BuildNumber; $script:infoStore["OS Build"] = $osInfo.BuildNumber
-            $osData["Architecture:"] = $osInfo.OSArchitecture; $script:infoStore["OS Architecture"] = $osInfo.OSArchitecture
-            try { $productID = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").ProductId; $osData["Product ID:"] = $productID; $script:infoStore["Product ID"] = $productID } catch {}
-            & $populateGroupBox $gbOs $osData
-            
-            # --- CPU Information ---
-            $cpuData = [ordered]@{}
-            $cpuInfo = Get-CimInstance -ClassName Win32_Processor
-            $cpuData["Name:"] = $cpuInfo.Name.Trim(); $script:infoStore["CPU"] = $cpuInfo.Name.Trim()
-            $cpuData["Cores (Logical):"] = "$($cpuInfo.NumberOfCores) ($($cpuInfo.NumberOfLogicalProcessors))"; $script:infoStore["Cores"] = "$($cpuInfo.NumberOfCores) ($($cpuInfo.NumberOfLogicalProcessors))"
-            $virtEnabled = if ($cpuInfo.VirtualizationFirmwareEnabled) { "Enabled" } else { "Disabled" }
-            $cpuData["Virtualization:"] = "Firmware $virtEnabled"; $script:infoStore["Virtualization"] = "Firmware $virtEnabled"
-            & $populateGroupBox $gbCpu $cpuData
 
-            # --- System Hardware ---
-            $hwData = [ordered]@{}
-            $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
-            $hwData["Manufacturer:"] = $computerSystem.Manufacturer; $script:infoStore["Manufacturer"] = $computerSystem.Manufacturer
-            $hwData["Model:"] = $computerSystem.Model; $script:infoStore["Model"] = $computerSystem.Model
-            $boardInfo = Get-CimInstance -ClassName Win32_BaseBoard
-            $hwData["Motherboard:"] = "$($boardInfo.Manufacturer) $($boardInfo.Product)"; $script:infoStore["Motherboard"] = "$($boardInfo.Manufacturer) $($boardInfo.Product)"
-            $biosInfo = Get-CimInstance -ClassName Win32_BIOS
-            $hwData["BIOS Version:"] = $biosInfo.SMBIOSBIOSVersion; $script:infoStore["BIOS Version"] = $biosInfo.SMBIOSBIOSVersion
+        # --- Create all GroupBoxes ---
+        $gbOs = New-InfoGroupBox "Operating System" $geminiBlue
+        $gbCpu = New-InfoGroupBox "Processor" $geminiYellow
+        $gbRam = New-InfoGroupBox "Memory (RAM)" $geminiBlue
+        $gbHardware = New-InfoGroupBox "System Hardware" $geminiYellow
+        $gbGpu = New-InfoGroupBox "Video Card(s)" $geminiBlue
+        $gbNetwork = New-InfoGroupBox "Network Adapters" $geminiYellow
+        $gbDisk = New-InfoGroupBox "Disk Drives" $geminiBlue
+
+        # --- Add GroupBoxes to the layout ---
+        $mainTableLayout.Controls.Add($gbOs, 0, 0)
+        $mainTableLayout.Controls.Add($gbCpu, 0, 1)
+        $mainTableLayout.Controls.Add($gbRam, 0, 2)
+        $mainTableLayout.Controls.Add($gbHardware, 0, 3)
+        $mainTableLayout.Controls.Add($gbGpu, 1, 0)
+        $mainTableLayout.Controls.Add($gbNetwork, 1, 1)
+        $mainTableLayout.Controls.Add($gbDisk, 1, 2)
+        $mainTableLayout.SetRowSpan($gbDisk, 2)
+        
+        # --- Button Panel ---
+        $buttonPanel = New-Object System.Windows.Forms.FlowLayoutPanel
+        $buttonPanel.Dock = "Fill"
+        $buttonPanel.FlowDirection = "LeftToRight"
+        $buttonPanel.Padding = New-Object System.Windows.Forms.Padding(10, 10, 0, 0)
+        $buttonPanel.BackColor = $geminiDarkBg
+        $mainTableLayout.SetColumnSpan($buttonPanel, 2)
+        $mainTableLayout.Controls.Add($buttonPanel, 0, 4)
+
+        # --- Progress Bar for operations ---
+        $progressBar = New-Object System.Windows.Forms.ProgressBar
+        $progressBar.Size = New-Object System.Drawing.Size(200, 18)
+        $progressBar.Style = "Continuous"
+        $progressBar.Visible = $false
+        $buttonPanel.Controls.Add($progressBar)
+
+        # --- Helper function to create styled Buttons with hover effects ---
+        function New-ActionButton($Text, $BackColor, $HoverColor) {
+            $button = New-Object System.Windows.Forms.Button
+            $button.Text = $Text
+            $button.Size = "130,30"
+            $button.Font = $buttonFont
+            $button.ForeColor = $geminiWhiteText
+            $button.BackColor = $BackColor
+            $button.FlatStyle = "Flat"
+            $button.FlatAppearance.BorderSize = 0
+            $button.Cursor = [System.Windows.Forms.Cursors]::Hand
+            $button.Margin = New-Object System.Windows.Forms.Padding(4, 0, 4, 0)
             
-            # ADDED: Secure Boot Status
-            $secureBootStatus = try { if (Confirm-SecureBootUEFI) { "Enabled" } else { "Disabled" } } catch { "Unsupported / Error" }
-            $hwData["Secure Boot:"] = $secureBootStatus; $script:infoStore["Secure Boot"] = $secureBootStatus
+            # Store original colors in a simple way
+            if (-not $script:originalColors) { $script:originalColors = @{} }
+            $script:originalColors[$button] = @{
+                OriginalColor = $BackColor
+                HoverColor = $HoverColor
+                OriginalFont = $buttonFont
+            }
             
-            # ADDED: TPM Status
-            $tpmStatus = "Not Found"
+            # Add subtle hover effects
+            $button.Add_MouseEnter({
+                try {
+                    if ($script:originalColors.ContainsKey($this)) {
+                        $colors = $script:originalColors[$this]
+                        $this.BackColor = $colors.HoverColor
+                        $this.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+                    }
+                } catch {
+                    # Silently ignore hover errors
+                }
+            })
+            $button.Add_MouseLeave({
+                try {
+                    if ($script:originalColors.ContainsKey($this)) {
+                        $colors = $script:originalColors[$this]
+                        $this.BackColor = $colors.OriginalColor
+                        $this.Font = $colors.OriginalFont
+                    }
+                } catch {
+                    # Silently ignore hover errors
+                }
+            })
+            
+            return $button
+        }
+
+        $buttonCopy = New-ActionButton "Copy to Clipboard" $geminiYellow ([System.Drawing.Color]::FromArgb(240, 200, 70))
+        $buttonRefresh = New-ActionButton "Refresh" $geminiBlue ([System.Drawing.Color]::FromArgb(80, 120, 200))
+        $buttonExport = New-ActionButton "Export to File" $geminiAccent ([System.Drawing.Color]::FromArgb(50, 220, 255))
+        
+        $buttonPanel.Controls.AddRange(@($buttonCopy, $buttonRefresh, $buttonExport))
+
+        # --- Data Population Logic ---
+        $script:infoStore = @{}
+        
+        function Update-SystemInfo {
             try {
-                $tpmInfo = Get-Tpm -ErrorAction SilentlyContinue
-                if ($tpmInfo -and $tpmInfo.TpmPresent) {
-                    if ($tpmInfo.TpmReady -and $tpmInfo.SpecificationVersion -eq "2.0") {
-                        $tpmStatus = "Present & Ready (2.0)"
-                    } elseif ($tpmInfo.SpecificationVersion -eq "2.0") {
-                        $tpmStatus = "Present, Not Ready (2.0)"
-                    } else {
-                        $tpmStatus = "Present (Version < 2.0)"
+                $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+                $progressBar.Visible = $true
+                $progressBar.Value = 10
+                $script:infoStore.Clear()
+                
+                $populateGroupBox = {
+                    param($GroupBox, $Data)
+                    try {
+                        $tlp = $GroupBox.Controls[0].Controls[0]
+                        $tlp.Controls.Clear()
+                        $tlp.RowCount = 0
+                        
+                        foreach ($item in $Data.GetEnumerator()) {
+                            $label = New-Object System.Windows.Forms.Label
+                            $label.Text = $item.Key
+                            $label.Font = $labelFont
+                            $label.ForeColor = $geminiGrayText
+                            $label.AutoSize = $true
+                            $label.Margin = New-Object System.Windows.Forms.Padding(0, 0, 8, 3)
+                            
+                            $value = New-Object System.Windows.Forms.Label
+                            $value.Text = $item.Value
+                            $value.Font = $valueFont
+                            $value.ForeColor = $geminiWhiteText
+                            $value.AutoSize = $true
+                            $value.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 3)
+                            
+                            # Add tooltip for long values
+                            if ($value.Text.Length -gt 50) {
+                                $tooltip = New-Object System.Windows.Forms.ToolTip
+                                $tooltip.SetToolTip($value, $value.Text)
+                            }
+                            
+                            $tlp.Controls.Add($label, 0, $tlp.RowCount)
+                            $tlp.Controls.Add($value, 1, $tlp.RowCount)
+                            
+                            $tlp.RowCount += 1
+                            $tlp.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
+                        }
+                    } catch {
+                        Write-LogAndHost "Error populating group box: $($_.Exception.Message)" -HostColor Red -LogPrefix "Show-SystemInfo"
                     }
                 }
-            } catch {
-                $tpmStatus = "Unsupported / Error"
-            }
-            $hwData["TPM Status:"] = $tpmStatus; $script:infoStore["TPM Status"] = $tpmStatus
-
-            & $populateGroupBox $gbHardware $hwData
-
-            # --- Memory (RAM) ---
-            $ramData = [ordered]@{}
-            $ramGB = [math]::Round($computerSystem.TotalPhysicalMemory / 1GB, 2)
-            $ramData["Total Installed:"] = "$($ramGB) GB"; $script:infoStore["Total RAM"] = "$($ramGB) GB"
-            $ramData["Modules:"] = ""
-            $memoryModules = Get-CimInstance -ClassName Win32_PhysicalMemory -ErrorAction SilentlyContinue
-            if ($memoryModules) {
-                $i = 1
-                foreach ($module in @($memoryModules)) {
-                    $capacityGB = [math]::Round($module.Capacity / 1GB, 2)
-                    $key = "- Slot $i ($($module.DeviceLocator)):"; $value = "$($capacityGB) GB, $($module.ConfiguredClockSpeed) MHz, $($module.Manufacturer)"
-                    $ramData[$key] = $value; $script:infoStore["RAM Module $i"] = $value; $i++
-                }
-            }
-            & $populateGroupBox $gbRam $ramData
-            
-            # --- Video Cards ---
-            $gpuData = [ordered]@{}
-            $videoControllers = Get-CimInstance -ClassName Win32_VideoController
-            $i = 1
-            foreach ($video in @($videoControllers)) {
-                $gpuData["Name:"] = $video.Name; $script:infoStore["GPU $i Name"] = $video.Name
-                $adapterRamGB = $null; $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\"
-                $matchingKey = (Get-ChildItem -Path $regPath -EA SilentlyContinue) | ? { ($_.GetValue("DriverDesc") -eq $video.Name) -or ($_.GetValue("Description") -eq $video.Name) } | Select -First 1
-                if ($matchingKey) { $vramBytes = $matchingKey.GetValue("HardwareInformation.qwMemorySize"); if ($vramBytes -gt 0) { $adapterRamGB = [math]::Round($vramBytes / 1GB, 2) } }
-                if (-not $adapterRamGB -and $video.AdapterRAM) { $adapterRamGB = [math]::Round($video.AdapterRAM / 1GB, 2) }
-                $gpuData["Adapter RAM:"] = "$($adapterRamGB) GB"; $script:infoStore["GPU $i VRAM"] = "$($adapterRamGB) GB"
-                $gpuData["Driver Version:"] = $video.DriverVersion; $script:infoStore["GPU $i Driver"] = $video.DriverVersion
-                $gpuData[" "] = ""; $i++
-            }
-            & $populateGroupBox $gbGpu $gpuData
-
-            # --- Disk Information (UPDATED) ---
-            $diskTlp = $gbDisk.Controls[0].Controls[0]
-            $diskTlp.Controls.Clear()
-            $diskTlp.RowCount = 0
-            
-            $disks = Get-CimInstance -ClassName Win32_DiskDrive
-            foreach ($disk in @($disks)) {
-                $sizeGB = [math]::Round($disk.Size / 1GB, 2)
-                $diskType = (Get-PhysicalDisk -DeviceNumber $disk.Index -EA SilentlyContinue).MediaType
                 
-                # Create label for the disk
-                $diskLabel = New-Object System.Windows.Forms.Label
-                $diskLabel.Text = "$($disk.Model) ($($sizeGB) GB) - $diskType"
-                $diskLabel.Font = $groupboxFont
-                $diskLabel.ForeColor = $gbDisk.ForeColor # Use the same color as the GroupBox header
-                $diskLabel.AutoSize = $true
-                $diskTlp.Controls.Add($diskLabel, 0, $diskTlp.RowCount)
-                $diskTlp.SetColumnSpan($diskLabel, 2)
-                $diskTlp.RowCount += 1
-                $diskTlp.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
-                $script:infoStore["Disk $($disk.Index)"] = $diskLabel.Text
+                # --- OS Information ---
+                $progressBar.Value = 20
+                $osData = [ordered]@{}
+                $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+                if ($osInfo) {
+                    $osData["Name:"] = $osInfo.Caption
+                    $script:infoStore["OS Name"] = $osInfo.Caption
+                    $osData["Version:"] = $osInfo.Version
+                    $script:infoStore["OS Version"] = $osInfo.Version
+                    $osData["Build:"] = $osInfo.BuildNumber
+                    $script:infoStore["OS Build"] = $osInfo.BuildNumber
+                    $osData["Architecture:"] = $osInfo.OSArchitecture
+                    $script:infoStore["OS Architecture"] = $osInfo.OSArchitecture
+                    $osData["Install Date:"] = $osInfo.InstallDate.ToString("yyyy-MM-dd")
+                    $script:infoStore["Install Date"] = $osInfo.InstallDate.ToString("yyyy-MM-dd")
+                    $osData["Last Boot:"] = $osInfo.LastBootUpTime.ToString("yyyy-MM-dd HH:mm:ss")
+                    $script:infoStore["Last Boot"] = $osInfo.LastBootUpTime.ToString("yyyy-MM-dd HH:mm:ss")
+                    try { 
+                        $productID = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).ProductId
+                        if ($productID) {
+                            $osData["Product ID:"] = $productID
+                            $script:infoStore["Product ID"] = $productID 
+                        }
+                    } catch {}
+                    try { 
+                        $editionID = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).EditionID
+                        if ($editionID) {
+                            $osData["Edition:"] = $editionID
+                            $script:infoStore["Edition"] = $editionID 
+                        }
+                    } catch {}
+                }
+                & $populateGroupBox $gbOs $osData
+                
+                # --- CPU Information ---
+                $progressBar.Value = 30
+                $cpuData = [ordered]@{}
+                $cpuInfo = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
+                if ($cpuInfo) {
+                    $cpuData["Name:"] = $cpuInfo.Name.Trim()
+                    $script:infoStore["CPU"] = $cpuInfo.Name.Trim()
+                    $cpuData["Cores (Logical):"] = "$($cpuInfo.NumberOfCores) ($($cpuInfo.NumberOfLogicalProcessors))"
+                    $script:infoStore["Cores"] = "$($cpuInfo.NumberOfCores) ($($cpuInfo.NumberOfLogicalProcessors))"
+                    
+                    # Removed clock speed and cache information as requested
+                    
+                    $virtEnabled = if ($cpuInfo.VirtualizationFirmwareEnabled) { "Enabled" } else { "Disabled" }
+                    $cpuData["Virtualization:"] = "Firmware $virtEnabled"
+                    $script:infoStore["Virtualization"] = "Firmware $virtEnabled"
+                }
+                & $populateGroupBox $gbCpu $cpuData
 
-                $partitions = Get-CimAssociatedInstance -InputObject $disk -ResultClassName Win32_DiskPartition
-                foreach ($partition in @($partitions)) {
-                    $logicalDisk = Get-CimAssociatedInstance -InputObject $partition -ResultClassName Win32_LogicalDisk
-                    if ($logicalDisk) {
-                        $freeGB = [math]::Round($logicalDisk.FreeSpace / 1GB, 2)
-                        $percentFree = [math]::Round(($logicalDisk.FreeSpace / $logicalDisk.Size) * 100, 2)
+                # --- System Hardware ---
+                $progressBar.Value = 40
+                $hwData = [ordered]@{}
+                $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+                if ($computerSystem) {
+                    $hwData["Manufacturer:"] = $computerSystem.Manufacturer
+                    $script:infoStore["Manufacturer"] = $computerSystem.Manufacturer
+                    $hwData["Model:"] = $computerSystem.Model
+                    $script:infoStore["Model"] = $computerSystem.Model
+                    $hwData["System Type:"] = $computerSystem.SystemType
+                    $script:infoStore["System Type"] = $computerSystem.SystemType
+                }
+                $boardInfo = Get-CimInstance -ClassName Win32_BaseBoard -ErrorAction SilentlyContinue
+                if ($boardInfo) {
+                    $hwData["Motherboard:"] = "$($boardInfo.Manufacturer) $($boardInfo.Product)"
+                    $script:infoStore["Motherboard"] = "$($boardInfo.Manufacturer) $($boardInfo.Product)"
+                }
+                $biosInfo = Get-CimInstance -ClassName Win32_BIOS -ErrorAction SilentlyContinue
+                if ($biosInfo) {
+                    $hwData["BIOS Version:"] = $biosInfo.SMBIOSBIOSVersion
+                    $script:infoStore["BIOS Version"] = $biosInfo.SMBIOSBIOSVersion
+                    $hwData["BIOS Release Date:"] = $biosInfo.ReleaseDate.ToString("yyyy-MM-dd")
+                    $script:infoStore["BIOS Release Date"] = $biosInfo.ReleaseDate.ToString("yyyy-MM-dd")
+                }
+                
+                $secureBootStatus = try { if (Confirm-SecureBootUEFI -ErrorAction SilentlyContinue) { "Enabled" } else { "Disabled" } } catch { "Unsupported / Error" }
+                $hwData["Secure Boot:"] = $secureBootStatus
+                $script:infoStore["Secure Boot"] = $secureBootStatus
+                
+                $tpmStatus = "Not Found"
+                try {
+                    $tpmInfo = Get-Tpm -ErrorAction SilentlyContinue
+                    if ($tpmInfo -and $tpmInfo.TpmPresent) {
+                        if ($tpmInfo.TpmReady -and $tpmInfo.SpecificationVersion -eq "2.0") {
+                            $tpmStatus = "Present & Ready (2.0)"
+                        } elseif ($tpmInfo.SpecificationVersion -eq "2.0") {
+                            $tpmStatus = "Present, Not Ready (2.0)"
+                        } else {
+                            $tpmStatus = "Present (Version < 2.0)"
+                        }
+                    }
+                } catch {
+                    $tpmStatus = "Unsupported / Error"
+                }
+                $hwData["TPM Status:"] = $tpmStatus
+                $script:infoStore["TPM Status"] = $tpmStatus
+
+                & $populateGroupBox $gbHardware $hwData
+
+                # --- Memory (RAM) ---
+                $progressBar.Value = 50
+                $ramData = [ordered]@{}
+                if ($computerSystem) {
+                    $ramGB = [math]::Round($computerSystem.TotalPhysicalMemory / 1GB, 2)
+                    $ramData["Total Installed:"] = "$($ramGB) GB"
+                    $script:infoStore["Total RAM"] = "$($ramGB) GB"
+                }
+                $osInfoForRam = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+                if ($osInfoForRam) {
+                    $ramData["Available:"] = "$([math]::Round($osInfoForRam.FreePhysicalMemory / 1MB, 2)) GB"
+                    $script:infoStore["Available RAM"] = "$([math]::Round($osInfoForRam.FreePhysicalMemory / 1MB, 2)) GB"
+                }
+                $ramData["Modules:"] = ""
+                $memoryModules = Get-CimInstance -ClassName Win32_PhysicalMemory -ErrorAction SilentlyContinue
+                if ($memoryModules) {
+                    $i = 1
+                    foreach ($module in @($memoryModules)) {
+                        $capacityGB = [math]::Round($module.Capacity / 1GB, 2)
+                        $key = "- Slot $i ($($module.DeviceLocator)):"
+                        $value = "$($capacityGB) GB, $($module.ConfiguredClockSpeed) MHz, $($module.Manufacturer)"
+                        $ramData[$key] = $value
+                        $script:infoStore["RAM Module $i"] = $value
+                        $i++
+                    }
+                }
+                & $populateGroupBox $gbRam $ramData
+                
+                # --- Video Cards ---
+                $progressBar.Value = 60
+                $gpuData = [ordered]@{}
+                $videoControllers = Get-CimInstance -ClassName Win32_VideoController -ErrorAction SilentlyContinue
+                if ($videoControllers) {
+                    $i = 1
+                    foreach ($video in @($videoControllers)) {
+                        $gpuData["Name:"] = $video.Name
+                        $script:infoStore["GPU $i Name"] = $video.Name
+                        $adapterRamGB = $null
+                        try {
+                            $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\"
+                            $matchingKey = (Get-ChildItem -Path $regPath -EA SilentlyContinue) | Where-Object { 
+                                ($_.GetValue("DriverDesc") -eq $video.Name) -or ($_.GetValue("Description") -eq $video.Name) 
+                            } | Select-Object -First 1
+                            if ($matchingKey) { 
+                                $vramBytes = $matchingKey.GetValue("HardwareInformation.qwMemorySize")
+                                if ($vramBytes -gt 0) { $adapterRamGB = [math]::Round($vramBytes / 1GB, 2) } 
+                            }
+                        } catch {}
+                        if (-not $adapterRamGB -and $video.AdapterRAM) { 
+                            $adapterRamGB = [math]::Round($video.AdapterRAM / 1GB, 2) 
+                        }
+                        $gpuData["Adapter RAM:"] = "$($adapterRamGB) GB"
+                        $script:infoStore["GPU $i VRAM"] = "$($adapterRamGB) GB"
+                        $gpuData["Driver Version:"] = $video.DriverVersion
+                        $script:infoStore["GPU $i Driver"] = $video.DriverVersion
+                        $gpuData["Driver Date:"] = $video.DriverDate.ToString("yyyy-MM-dd")
+                        $script:infoStore["GPU $i Driver Date"] = $video.DriverDate.ToString("yyyy-MM-dd")
+                        # Fixed resolution display with standard "x" instead of "×" to avoid encoding issues
+                        $gpuData["Current Resolution:"] = "$($video.CurrentHorizontalResolution)x$($video.CurrentVerticalResolution) @ $($video.CurrentRefreshRate)Hz"
+                        $script:infoStore["GPU $i Resolution"] = "$($video.CurrentHorizontalResolution)x$($video.CurrentVerticalResolution) @ $($video.CurrentRefreshRate)Hz"
+                        $gpuData[" "] = ""
+                        $i++
+                    }
+                }
+                & $populateGroupBox $gbGpu $gpuData
+
+                # --- Disk Information ---
+                $progressBar.Value = 70
+                $diskTlp = $gbDisk.Controls[0].Controls[0]
+                $diskTlp.Controls.Clear()
+                $diskTlp.RowCount = 0
+                
+                $disks = Get-CimInstance -ClassName Win32_DiskDrive -ErrorAction SilentlyContinue
+                if ($disks) {
+                    foreach ($disk in @($disks)) {
+                        $sizeGB = [math]::Round($disk.Size / 1GB, 2)
+                        $diskType = try { (Get-PhysicalDisk -DeviceNumber $disk.Index -EA SilentlyContinue).MediaType } catch { "Unknown" }
                         
-                        # Create labels for the partition
-                        $driveLabel = New-Object System.Windows.Forms.Label
-                        $driveLabel.Text = "  - Drive $($logicalDisk.DeviceID):"
-                        $driveLabel.Font = $commonFont
-                        $driveLabel.ForeColor = $labelColor
-                        $driveLabel.AutoSize = $true
-                        
-                        $freeSpaceLabel = New-Object System.Windows.Forms.Label
-                        $freeSpaceLabel.Text = "Free: $($freeGB) GB ($($percentFree)%)"
-                        $freeSpaceLabel.Font = $commonFont
-                        $freeSpaceLabel.ForeColor = $valueColor
-                        $freeSpaceLabel.AutoSize = $true
-                        
-                        $diskTlp.Controls.Add($driveLabel, 0, $diskTlp.RowCount)
-                        $diskTlp.Controls.Add($freeSpaceLabel, 1, $diskTlp.RowCount)
+                        $diskLabel = New-Object System.Windows.Forms.Label
+                        $diskLabel.Text = "$($disk.Model) ($($sizeGB) GB) - $diskType"
+                        $diskLabel.Font = $headerFont
+                        $diskLabel.ForeColor = $gbDisk.ForeColor
+                        $diskLabel.AutoSize = $true
+                        $diskLabel.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 3)
+                        $diskTlp.Controls.Add($diskLabel, 0, $diskTlp.RowCount)
+                        $diskTlp.SetColumnSpan($diskLabel, 2)
                         $diskTlp.RowCount += 1
                         $diskTlp.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
-                        $script:infoStore["Partition $($logicalDisk.DeviceID)"] = "Free: $($freeGB) GB ($($percentFree)%)"
+                        $script:infoStore["Disk $($disk.Index)"] = $diskLabel.Text
+
+                        $partitions = Get-CimAssociatedInstance -InputObject $disk -ResultClassName Win32_DiskPartition -ErrorAction SilentlyContinue
+                        if ($partitions) {
+                            foreach ($partition in @($partitions)) {
+                                $logicalDisk = Get-CimAssociatedInstance -InputObject $partition -ResultClassName Win32_LogicalDisk -ErrorAction SilentlyContinue
+                                if ($logicalDisk) {
+                                    $freeGB = [math]::Round($logicalDisk.FreeSpace / 1GB, 2)
+                                    $usedGB = [math]::Round(($logicalDisk.Size - $logicalDisk.FreeSpace) / 1GB, 2)
+                                    $percentFree = [math]::Round(($logicalDisk.FreeSpace / $logicalDisk.Size) * 100, 2)
+                                    
+                                    $driveLabel = New-Object System.Windows.Forms.Label
+                                    $driveLabel.Text = "  - Drive $($logicalDisk.DeviceID):"
+                                    $driveLabel.Font = $labelFont
+                                    $driveLabel.ForeColor = $geminiGrayText
+                                    $driveLabel.AutoSize = $true
+                                    $driveLabel.Margin = New-Object System.Windows.Forms.Padding(0, 0, 8, 3)
+                                    
+                                    $sizeLabel = New-Object System.Windows.Forms.Label
+                                    $sizeLabel.Text = "Size: $($usedGB) GB used / $($freeGB) GB free ($($percentFree)%)"
+                                    $sizeLabel.Font = $valueFont
+                                    $sizeLabel.ForeColor = $geminiWhiteText
+                                    $sizeLabel.AutoSize = $true
+                                    $sizeLabel.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 3)
+                                    
+                                    # Add a mini progress bar for disk usage
+                                    $diskUsageBar = New-Object System.Windows.Forms.ProgressBar
+                                    $diskUsageBar.Value = 100 - $percentFree
+                                    $diskUsageBar.Size = New-Object System.Drawing.Size(120, 8)
+                                    $diskUsageBar.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 3)
+                                    
+                                    $diskTlp.Controls.Add($driveLabel, 0, $diskTlp.RowCount)
+                                    $diskTlp.Controls.Add($sizeLabel, 1, $diskTlp.RowCount)
+                                    $diskTlp.RowCount += 1
+                                    $diskTlp.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
+                                    
+                                    $diskTlp.Controls.Add($diskUsageBar, 1, $diskTlp.RowCount)
+                                    $diskTlp.SetColumnSpan($diskUsageBar, 2)
+                                    $diskTlp.RowCount += 1
+                                    $diskTlp.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null
+                                    
+                                    $script:infoStore["Partition $($logicalDisk.DeviceID)"] = "Size: $($usedGB) GB used / $($freeGB) GB free ($($percentFree)%)"
+                                }
+                            }
+                        }
                     }
                 }
-            }
-            
-            # --- Network Information ---
-            $netData = [ordered]@{}
-            $netAdapters = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled }
-            $i = 1
-            foreach ($adapter in @($netAdapters)) {
-                $netData["Description:"] = $adapter.Description; $script:infoStore["NIC $i Desc"] = $adapter.Description
-                $netData["IP Address:"] = ($adapter.IPAddress -join ', '); $script:infoStore["NIC $i IP"] = ($adapter.IPAddress -join ', ')
-                $netData["MAC Address:"] = $adapter.MACAddress; $script:infoStore["NIC $i MAC"] = $adapter.MACAddress
-                $netData["Default Gateway:"] = ($adapter.DefaultIPGateway -join ', '); $script:infoStore["NIC $i Gateway"] = ($adapter.DefaultIPGateway -join ', ')
-                $netData["DNS Servers:"] = ($adapter.DNSServerSearchOrder -join ', '); $script:infoStore["NIC $i DNS"] = ($adapter.DNSServerSearchOrder -join ', ')
-                $netData[" "] = ""; $i++
-            }
-            & $populateGroupBox $gbNetwork $netData
+                
+                # --- Network Information ---
+                $progressBar.Value = 80
+                $netData = [ordered]@{}
+                $netAdapters = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -ErrorAction SilentlyContinue | Where-Object { $_.IPEnabled }
+                if ($netAdapters) {
+                    $i = 1
+                    foreach ($adapter in @($netAdapters)) {
+                        $netData["Description:"] = $adapter.Description
+                        $script:infoStore["NIC $i Desc"] = $adapter.Description
+                        $netData["IP Address:"] = ($adapter.IPAddress -join ', ')
+                        $script:infoStore["NIC $i IP"] = ($adapter.IPAddress -join ', ')
+                        $netData["MAC Address:"] = $adapter.MACAddress
+                        $script:infoStore["NIC $i MAC"] = $adapter.MACAddress
+                        $netData["Default Gateway:"] = ($adapter.DefaultIPGateway -join ', ')
+                        $script:infoStore["NIC $i Gateway"] = ($adapter.DefaultIPGateway -join ', ')
+                        $netData["DNS Servers:"] = ($adapter.DNSServerSearchOrder -join ', ')
+                        $script:infoStore["NIC $i DNS"] = ($adapter.DNSServerSearchOrder -join ', ')
+                        $netData["DHCP Enabled:"] = if ($adapter.DHCPEnabled) { "Yes" } else { "No" }
+                        $script:infoStore["NIC $i DHCP"] = if ($adapter.DHCPEnabled) { "Yes" } else { "No" }
+                        $netData[" "] = ""
+                        $i++
+                    }
+                }
+                & $populateGroupBox $gbNetwork $netData
+                
+                $progressBar.Value = 100
+                Start-Sleep -Milliseconds 500
+                $progressBar.Visible = $false
 
-        } catch {
-            Write-LogAndHost "Failed to gather system information. Error: $($_.Exception.Message)" -HostColor Red -LogPrefix "Show-SystemInfo"
-        } finally {
-            $form.Cursor = [System.Windows.Forms.Cursors]::Default
-        }
-    }
-
-    # --- Button Event Handlers ---
-    $buttonRefresh.Add_Click({ Update-SystemInfo })
-    $buttonCopy.Add_Click({
-        $clipboardText = ""
-        $sections = @(
-            "--- Operating System ---", "OS Name", "OS Version", "OS Build", "OS Architecture", "Product ID",
-            "--- Processor ---", "CPU", "Cores", "Virtualization",
-            "--- System Hardware ---", "Manufacturer", "Model", "Motherboard", "BIOS Version", "Secure Boot", "TPM Status",
-            "--- Memory (RAM) ---", "Total RAM",
-            "--- Video Card(s) ---",
-            "--- Disk Drives ---",
-            "--- Network Adapters ---"
-        )
-        foreach ($section in $sections) {
-            if ($section.StartsWith("---")) { $clipboardText += "`r`n$section`r`n" }
-            elseif ($script:infoStore.ContainsKey($section)) { $clipboardText += "$section`: $($script:infoStore[$section])`r`n" }
-        }
-        # Special handling for multi-entry sections
-        ($script:infoStore.Keys | Where-Object { $_ -like "RAM Module *" } | Sort-Object) | ForEach-Object { $clipboardText += "  - $($script:infoStore[$_])`r`n" }
-        ($script:infoStore.Keys | Where-Object { $_ -like "GPU * Name" } | Sort-Object) | ForEach-Object { 
-            $gpuNum = $_.Split(' ')[1]; $clipboardText += "`r`nGPU: $($script:infoStore[$_])`r`n"; $clipboardText += "  VRAM: $($script:infoStore["GPU $gpuNum VRAM"])`r`n"; $clipboardText += "  Driver: $($script:infoStore["GPU $gpuNum Driver"])`r`n"
-        }
-        ($script:infoStore.Keys | Where-Object { $_ -like "Disk *" } | Sort-Object) | ForEach-Object { 
-            $clipboardText += "`r`nDisk: $($script:infoStore[$_])`r`n"
-            $diskIndex = $_.Split(' ')[1]
-            ($script:infoStore.Keys | Where-Object { $_ -like "Partition*" } | Sort-Object) | ForEach-Object {
-                 $clipboardText += "  - $($script:infoStore[$_])`r`n"
+            } catch {
+                Write-LogAndHost "Failed to gather system information. Error: $($_.Exception.Message)" -HostColor Red -LogPrefix "Show-SystemInfo"
+                $progressBar.Visible = $false
+            } finally {
+                $form.Cursor = [System.Windows.Forms.Cursors]::Default
             }
         }
-        ($script:infoStore.Keys | Where-Object { $_ -like "NIC * Desc" } | Sort-Object) | ForEach-Object { 
-            $nicNum = $_.Split(' ')[1]; $clipboardText += "`r`nNIC: $($script:infoStore[$_])`r`n"; $clipboardText += "  IP: $($script:infoStore["NIC $nicNum IP"])`r`n"; $clipboardText += "  MAC: $($script:infoStore["NIC $nicNum MAC"])`r`n"
-        }
-        Set-Clipboard -Value $clipboardText.Trim()
-        [System.Windows.Forms.MessageBox]::Show("System information copied to clipboard.", "Success", "OK", "Information") | Out-Null
-    })
 
-    # --- Initial Load and Show Form ---
-    $form.Add_Shown({ $form.Opacity = 1 })
-    Update-SystemInfo
+        # --- Button Event Handlers ---
+        $buttonRefresh.Add_Click({ Update-SystemInfo })
+        
+        $buttonCopy.Add_Click({
+            try {
+                $clipboardText = ""
+                $sections = @(
+                    "--- Operating System ---", "OS Name", "OS Version", "OS Build", "OS Architecture", "Install Date", "Last Boot", "Product ID", "Edition",
+                    "--- Processor ---", "CPU", "Cores", "Virtualization",
+                    "--- System Hardware ---", "Manufacturer", "Model", "System Type", "Motherboard", "BIOS Version", "BIOS Release Date", "Secure Boot", "TPM Status",
+                    "--- Memory (RAM) ---", "Total RAM", "Available RAM",
+                    "--- Video Card(s) ---",
+                    "--- Disk Drives ---",
+                    "--- Network Adapters ---"
+                )
+                foreach ($section in $sections) {
+                    if ($section.StartsWith("---")) { $clipboardText += "`r`n$section`r`n" }
+                    elseif ($script:infoStore.ContainsKey($section)) { $clipboardText += "$section`: $($script:infoStore[$section])`r`n" }
+                }
+                # Special handling for multi-entry sections
+                ($script:infoStore.Keys | Where-Object { $_ -like "RAM Module *" } | Sort-Object) | ForEach-Object { $clipboardText += "  - $($script:infoStore[$_])`r`n" }
+                ($script:infoStore.Keys | Where-Object { $_ -like "GPU * Name" } | Sort-Object) | ForEach-Object { 
+                    $gpuNum = $_.Split(' ')[1]
+                    $clipboardText += "`r`nGPU: $($script:infoStore[$_])`r`n"
+                    $clipboardText += "  VRAM: $($script:infoStore["GPU $gpuNum VRAM"])`r`n"
+                    $clipboardText += "  Driver: $($script:infoStore["GPU $gpuNum Driver"])`r`n"
+                    $clipboardText += "  Driver Date: $($script:infoStore["GPU $gpuNum Driver Date"])`r`n"
+                    $clipboardText += "  Resolution: $($script:infoStore["GPU $gpuNum Resolution"])`r`n"
+                }
+                ($script:infoStore.Keys | Where-Object { $_ -like "Disk *" } | Sort-Object) | ForEach-Object { 
+                    $clipboardText += "`r`nDisk: $($script:infoStore[$_])`r`n"
+                    ($script:infoStore.Keys | Where-Object { $_ -like "Partition*" } | Sort-Object) | ForEach-Object {
+                         $clipboardText += "  - $($script:infoStore[$_])`r`n"
+                    }
+                }
+                ($script:infoStore.Keys | Where-Object { $_ -like "NIC * Desc" } | Sort-Object) | ForEach-Object { 
+                    $nicNum = $_.Split(' ')[1]
+                    $clipboardText += "`r`nNIC: $($script:infoStore[$_])`r`n"
+                    $clipboardText += "  IP: $($script:infoStore["NIC $nicNum IP"])`r`n"
+                    $clipboardText += "  MAC: $($script:infoStore["NIC $nicNum MAC"])`r`n"
+                    $clipboardText += "  Gateway: $($script:infoStore["NIC $nicNum Gateway"])`r`n"
+                    $clipboardText += "  DNS: $($script:infoStore["NIC $nicNum DNS"])`r`n"
+                    $clipboardText += "  DHCP: $($script:infoStore["NIC $nicNum DHCP"])`r`n"
+                }
+                Set-Clipboard -Value $clipboardText.Trim()
+                [System.Windows.Forms.MessageBox]::Show("System information copied to clipboard.", "Success", "OK", "Information") | Out-Null
+            } catch {
+                [System.Windows.Forms.MessageBox]::Show("Failed to copy to clipboard. Error: $($_.Exception.Message)", "Error", "OK", "Error") | Out-Null
+            }
+        })
+        
+        $buttonExport.Add_Click({
+            try {
+                $saveFileDialog = New-Object System.Windows.Forms.SaveFileDialog
+                $saveFileDialog.Filter = "Text files (*.txt)|*.txt|JSON files (*.json)|*.json|CSV files (*.csv)|*.csv"
+                $saveFileDialog.Title = "Export System Information"
+                $result = $saveFileDialog.ShowDialog()
+                
+                if ($result -eq "OK") {
+                    $extension = [System.IO.Path]::GetExtension($saveFileDialog.FileName)
+                    
+                    if ($extension -eq ".json") {
+                        # Export as JSON
+                        $json = $script:infoStore | ConvertTo-Json
+                        $json | Out-File -FilePath $saveFileDialog.FileName -Encoding UTF8
+                    } elseif ($extension -eq ".csv") {
+                        # Export as CSV
+                        $script:infoStore.GetEnumerator() | Select-Object @{Name="Property";Expression={$_.Key}}, @{Name="Value";Expression={$_.Value}} | Export-Csv -Path $saveFileDialog.FileName -NoTypeInformation
+                    } else {
+                        # Export as text (default)
+                        $clipboardText = ""
+                        $sections = @(
+                            "--- Operating System ---", "OS Name", "OS Version", "OS Build", "OS Architecture", "Install Date", "Last Boot", "Product ID", "Edition",
+                            "--- Processor ---", "CPU", "Cores", "Virtualization",
+                            "--- System Hardware ---", "Manufacturer", "Model", "System Type", "Motherboard", "BIOS Version", "BIOS Release Date", "Secure Boot", "TPM Status",
+                            "--- Memory (RAM) ---", "Total RAM", "Available RAM",
+                            "--- Video Card(s) ---",
+                            "--- Disk Drives ---",
+                            "--- Network Adapters ---"
+                        )
+                        foreach ($section in $sections) {
+                            if ($section.StartsWith("---")) { $clipboardText += "`r`n$section`r`n" }
+                            elseif ($script:infoStore.ContainsKey($section)) { $clipboardText += "$section`: $($script:infoStore[$section])`r`n" }
+                        }
+                        # Special handling for multi-entry sections
+                        ($script:infoStore.Keys | Where-Object { $_ -like "RAM Module *" } | Sort-Object) | ForEach-Object { $clipboardText += "  - $($script:infoStore[$_])`r`n" }
+                        ($script:infoStore.Keys | Where-Object { $_ -like "GPU * Name" } | Sort-Object) | ForEach-Object { 
+                            $gpuNum = $_.Split(' ')[1]
+                            $clipboardText += "`r`nGPU: $($script:infoStore[$_])`r`n"
+                            $clipboardText += "  VRAM: $($script:infoStore["GPU $gpuNum VRAM"])`r`n"
+                            $clipboardText += "  Driver: $($script:infoStore["GPU $gpuNum Driver"])`r`n"
+                            $clipboardText += "  Driver Date: $($script:infoStore["GPU $gpuNum Driver Date"])`r`n"
+                            $clipboardText += "  Resolution: $($script:infoStore["GPU $gpuNum Resolution"])`r`n"
+                        }
+                        ($script:infoStore.Keys | Where-Object { $_ -like "Disk *" } | Sort-Object) | ForEach-Object { 
+                            $clipboardText += "`r`nDisk: $($script:infoStore[$_])`r`n"
+                            ($script:infoStore.Keys | Where-Object { $_ -like "Partition*" } | Sort-Object) | ForEach-Object {
+                                 $clipboardText += "  - $($script:infoStore[$_])`r`n"
+                            }
+                        }
+                        ($script:infoStore.Keys | Where-Object { $_ -like "NIC * Desc" } | Sort-Object) | ForEach-Object { 
+                            $nicNum = $_.Split(' ')[1]
+                            $clipboardText += "`r`nNIC: $($script:infoStore[$_])`r`n"
+                            $clipboardText += "  IP: $($script:infoStore["NIC $nicNum IP"])`r`n"
+                            $clipboardText += "  MAC: $($script:infoStore["NIC $nicNum MAC"])`r`n"
+                            $clipboardText += "  Gateway: $($script:infoStore["NIC $nicNum Gateway"])`r`n"
+                            $clipboardText += "  DNS: $($script:infoStore["NIC $nicNum DNS"])`r`n"
+                            $clipboardText += "  DHCP: $($script:infoStore["NIC $nicNum DHCP"])`r`n"
+                        }
+                        $clipboardText | Out-File -FilePath $saveFileDialog.FileName -Encoding UTF8
+                    }
+                    
+                    [System.Windows.Forms.MessageBox]::Show("System information exported to $($saveFileDialog.FileName)", "Export Successful", "OK", "Information") | Out-Null
+                }
+            } catch {
+                [System.Windows.Forms.MessageBox]::Show("Failed to export system information. Error: $($_.Exception.Message)", "Export Failed", "OK", "Error") | Out-Null
+            }
+        })
 
-    try {
+        # --- Initial Load and Show Form ---
+        $form.Add_Shown({ 
+            try {
+                # Fade in effect
+                $fadeIn = {
+                    if ($form.Opacity -lt 1) {
+                        $form.Opacity += 0.05
+                        $form.Refresh()
+                        Start-Sleep -Milliseconds 20
+                        &$fadeIn
+                    }
+                }
+                &$fadeIn
+            } catch {
+                # Ignore fade-in errors
+            }
+        })
+        
+        Update-SystemInfo
+
         $null = $form.ShowDialog()
         Write-LogAndHost "System information GUI closed by user." -NoHost
+        
     } catch {
         Write-LogAndHost "An unexpected error occurred with the System Information GUI. Details: $($_.Exception.Message)" -HostColor Red
     } finally {
-        $form.Dispose()
+        try {
+            if ($form) { $form.Dispose() }
+        } catch {
+            # Ignore disposal errors
+        }
     }
 
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
@@ -2749,3 +3032,4 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
