@@ -30,9 +30,6 @@ $script:logFile = Join-Path -Path $scriptDir -ChildPath "install_log_$timestamp.
 #                                 PART 2: CORE FUNCTIONS
 # ================================================================================
 
-# ENHANCED FUNCTION: Writes messages to both the console and the log file.
-# Automatically prefixes messages with "ERROR:" or "WARNING:" based on HostColor
-# for standardized output and cleaner calling code.
 function Write-LogAndHost {
     param (
         [string]$Message,
@@ -249,22 +246,71 @@ function Invoke-WindowsUpdate {
     $null = Read-Host
 }
 
-# Function to disable common Windows Telemetry services and registry keys.
 function Invoke-DisableTelemetry {
     Write-LogAndHost "Checking Windows Telemetry status..." -HostColor Cyan
-    
-    $telemetryService = Get-Service -Name "DiagTrack" -ErrorAction SilentlyContinue
-    $telemetryRegValue = Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Name "AllowTelemetry" -ErrorAction SilentlyContinue
 
-    # Check if telemetry already appears to be disabled to avoid unnecessary work.
-    if ($telemetryService -and $telemetryService.StartType -eq 'Disabled' -and $telemetryRegValue -and $telemetryRegValue.AllowTelemetry -eq 0) {
+    # Define services and registry keys to manage
+    $servicesToDisable = @("DiagTrack", "dmwappushservice", "WerSvc")
+    $regKeys = @{
+        "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" = @{
+            "AllowTelemetry" = @{ Value = 0; Type = "DWord" }
+        }
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection" = @{
+            "AllowTelemetry" = @{ Value = 0; Type = "DWord" }
+        }
+        "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" = @{
+            "DisableWindowsConsumerFeatures" = @{ Value = 1; Type = "DWord" }
+        }
+        "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo" = @{
+            "DisabledByGroupPolicy" = @{ Value = 1; Type = "DWord" }
+        }
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy" = @{
+            "TailoredExperiencesWithDiagnosticDataEnabled" = @{ Value = 0; Type = "DWord" }
+            "AdvertisingID" = @{ Value = 0; Type = "DWord" }
+        }
+        "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting" = @{
+            "DisableCollection" = @{ Value = 1; Type = "DWord" }
+        }
+    }
+
+    # Check if telemetry is already disabled
+    $servicesDisabled = $true
+    foreach ($serviceName in $servicesToDisable) {
+        $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+        if ($service) {
+            if ($service.StartType -ne 'Disabled' -or $service.Status -ne 'Stopped') {
+                $servicesDisabled = $false
+                break
+            }
+        }
+    }
+
+    $regDisabled = $true
+    foreach ($path in $regKeys.Keys) {
+        $values = $regKeys[$path]
+        foreach ($valueName in $values.Keys) {
+            try {
+                $currentValue = Get-ItemProperty -Path $path -Name $valueName -ErrorAction Stop
+                if ($currentValue.$valueName -ne $values[$valueName].Value) {
+                    $regDisabled = $false
+                    break
+                }
+            } catch {
+                $regDisabled = $false
+                break
+            }
+        }
+        if (-not $regDisabled) { break }
+    }
+
+    if ($servicesDisabled -and $regDisabled) {
         Write-LogAndHost "Windows Telemetry appears to be already disabled." -HostColor Green
         Write-LogAndHost "No changes were made."
         Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
         $null = Read-Host
         return
     }
-    
+
     try {
         Write-LogAndHost "Telemetry is currently enabled. Continue with disabling? (Type y/n then press Enter)" -HostColor Yellow -LogPrefix "Invoke-DisableTelemetry"
         $confirmTelemetry = Read-Host
@@ -278,58 +324,72 @@ function Invoke-DisableTelemetry {
     }
 
     Write-LogAndHost "Applying telemetry settings..." -NoHost
-    
-    try {
-        # List of services related to telemetry.
-        $servicesToDisable = @("DiagTrack", "dmwappushservice")
-        foreach ($serviceName in $servicesToDisable) {
-            $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-            if ($service) {
-                try {
-                    Write-LogAndHost "Stopping service: $serviceName..." -NoLog
-                    Stop-Service -Name $serviceName -Force -ErrorAction Stop
-                    Write-LogAndHost "Disabling service: $serviceName..." -NoLog
-                    Set-Service -Name $serviceName -StartupType Disabled -ErrorAction Stop
-                    Write-LogAndHost "$serviceName service stopped and disabled."
-                } catch {
-                    Write-LogAndHost "Could not stop or disable service '$serviceName'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-DisableTelemetry"
-                }
-            } else {
-                Write-LogAndHost "Service '$serviceName' not found, skipping." -HostColor DarkGray -NoLog
+
+    # Process services
+    foreach ($serviceName in $servicesToDisable) {
+        $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+        if (-not $service) {
+            Write-LogAndHost "Service '$serviceName' not found, skipping." -HostColor DarkGray -NoLog
+            continue
+        }
+
+        $changed = $false
+        # Stop service if running
+        if ($service.Status -ne 'Stopped') {
+            try {
+                Stop-Service -Name $serviceName -Force -ErrorAction Stop
+                $changed = $true
+                Write-LogAndHost "Stopped service: $serviceName" -NoLog
+            } catch {
+                Write-LogAndHost "Could not stop service '$serviceName'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-DisableTelemetry"
             }
         }
 
-        Write-LogAndHost "Configuring registry keys..." -NoLog
-        
-        # A collection of registry keys to disable telemetry and related features.
-        $regKeys = @{
-            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" = @{ Name = "AllowTelemetry"; Value = 0; Type = "DWord" };
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection" = @{ Name = "AllowTelemetry"; Value = 0; Type = "DWord" };
-            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent" = @{ Name = "DisableWindowsConsumerFeatures"; Value = 1; Type = "DWord" };
-            "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo" = @{ Name = "DisabledByGroupPolicy"; Value = 1; Type = "DWord" };
-            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy" = @{ Name = "TailoredExperiencesWithDiagnosticDataEnabled"; Value = 0; Type = "DWord" };
+        # Disable startup type
+        if ($service.StartType -ne 'Disabled') {
+            try {
+                Set-Service -Name $serviceName -StartupType Disabled -ErrorAction Stop
+                $changed = $true
+                Write-LogAndHost "Disabled service: $serviceName" -NoLog
+            } catch {
+                Write-LogAndHost "Could not disable service '$serviceName'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-DisableTelemetry"
+            }
         }
 
-        foreach ($path in $regKeys.Keys) {
-            $keyInfo = $regKeys[$path]
+        if (-not $changed) {
+            Write-LogAndHost "Service '$serviceName' is already stopped and disabled." -HostColor DarkGray -NoLog
+        }
+    }
+
+    # Process registry keys
+    foreach ($path in $regKeys.Keys) {
+        $values = $regKeys[$path]
+        foreach ($valueName in $values.Keys) {
+            $valueInfo = $values[$valueName]
             try {
-                # Create the registry path if it doesn't exist.
+                $currentValue = Get-ItemProperty -Path $path -Name $valueName -ErrorAction Stop
+                if ($currentValue.$valueName -eq $valueInfo.Value) {
+                    Write-LogAndHost "Registry value '$valueName' at '$path' is already set to $($valueInfo.Value). Skipping." -HostColor DarkGray -NoLog
+                    continue
+                }
+            } catch {
+                # Value doesn't exist or path doesn't exist - proceed to create/set
+            }
+
+            try {
                 if (-not (Test-Path $path)) {
                     Write-LogAndHost "Creating registry path: $path" -NoLog
                     New-Item -Path $path -Force -ErrorAction Stop | Out-Null
                 }
-                Set-ItemProperty -Path $path -Name $keyInfo.Name -Value $keyInfo.Value -Type $keyInfo.Type -Force -ErrorAction Stop
-                Write-LogAndHost "Successfully set registry value '$($keyInfo.Name)' at '$path'." -NoHost
+                Set-ItemProperty -Path $path -Name $valueName -Value $valueInfo.Value -Type $valueInfo.Type -Force -ErrorAction Stop
+                Write-LogAndHost "Successfully set registry value '$valueName' at '$path'." -NoHost
             } catch {
-                Write-LogAndHost "Failed to set registry key at '$path'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-DisableTelemetry"
+                Write-LogAndHost "Failed to set registry key at '$path' for value '$valueName'. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-DisableTelemetry"
             }
         }
-        
-        Write-LogAndHost "Telemetry has been successfully disabled." -HostColor Green
-    } catch {
-        Write-LogAndHost "An unexpected error occurred while disabling telemetry. Details: $($_.Exception.Message)" -HostColor Red -LogPrefix "Invoke-DisableTelemetry"
     }
 
+    Write-LogAndHost "Telemetry has been successfully disabled." -HostColor Green
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
     $null = Read-Host
 }
@@ -719,8 +779,8 @@ function Show-SystemInfo {
                         $gpuData["Driver Date:"] = $video.DriverDate.ToString("yyyy-MM-dd")
                         $script:infoStore["GPU $i Driver Date"] = $video.DriverDate.ToString("yyyy-MM-dd")
                         # Fixed resolution display with standard "x" instead of "×" to avoid encoding issues
-                        $gpuData["Current Resolution:"] = "$($video.CurrentHorizontalResolution)x$($video.CurrentVerticalResolution) @ $($video.CurrentRefreshRate)Hz"
-                        $script:infoStore["GPU $i Resolution"] = "$($video.CurrentHorizontalResolution)x$($video.CurrentVerticalResolution) @ $($video.CurrentRefreshRate)Hz"
+                        $gpuData["Current Resolution:"] = "$($video.CurrentHorizontalResolution)x$($video.CurrentVerticalResolution) , $($video.CurrentRefreshRate)Hz"
+                        $script:infoStore["GPU $i Resolution"] = "$($video.CurrentHorizontalResolution)x$($video.CurrentVerticalResolution) , $($video.CurrentRefreshRate)Hz"
                         $gpuData[" "] = ""
                         $i++
                     }
@@ -1836,6 +1896,10 @@ function Create-UnattendXml {
         Start-Sleep -Seconds 2
         return
     }
+    
+    # Check if running with elevated privileges for certain operations
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    
     Write-LogAndHost "Launching Unattend XML Creator GUI..." -HostColor Cyan
     
     # --- State management for keyboard layout selection ---
@@ -1852,6 +1916,7 @@ function Create-UnattendXml {
     $form.FormBorderStyle = "FixedDialog"
     $form.MaximizeBox = $false
     $form.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 48)
+    $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon("$PSHOME\powershell.exe")
 
     # --- ToolTip Setup (for descriptions) ---
     $toolTip = New-Object System.Windows.Forms.ToolTip
@@ -1877,50 +1942,185 @@ function Create-UnattendXml {
     $controlBackColor = [System.Drawing.Color]::FromArgb(60, 60, 63)
     $controlForeColor = [System.Drawing.Color]::White
     $groupboxForeColor = [System.Drawing.Color]::Gainsboro
+    $errorColor = [System.Drawing.Color]::FromArgb(200, 50, 50)
 
     # Helper functions for creating styled controls.
-    function New-StyledLabel($Text, $Location) {
-        $label = New-Object System.Windows.Forms.Label; $label.Text = $Text; $label.Location = $Location; $label.Font = $commonFont; $label.ForeColor = $labelColor; $label.AutoSize = $true; return $label
+    function New-StyledLabel($Text, $Location, $Size = $null) {
+        $label = New-Object System.Windows.Forms.Label
+        $label.Text = $Text
+        $label.Location = $Location
+        if ($Size) { $label.Size = $Size } else { $label.AutoSize = $true }
+        $label.Font = $commonFont
+        $label.ForeColor = $labelColor
+        return $label
     }
-    function New-StyledTextBox($Location, $Size) {
-        $textbox = New-Object System.Windows.Forms.TextBox; $textbox.Location = $Location; $textbox.Size = $Size; $textbox.Font = $commonFont; $textbox.BackColor = $controlBackColor; $textbox.ForeColor = $controlForeColor; $textbox.BorderStyle = "FixedSingle"; return $textbox
+    
+    function New-StyledTextBox($Location, $Size, $Multiline = $false) {
+        $textbox = New-Object System.Windows.Forms.TextBox
+        $textbox.Location = $Location
+        $textbox.Size = $Size
+        $textbox.Font = $commonFont
+        $textbox.BackColor = $controlBackColor
+        $textbox.ForeColor = $controlForeColor
+        $textbox.BorderStyle = "FixedSingle"
+        $textbox.Multiline = $Multiline
+        return $textbox
     }
+    
     function New-StyledComboBox($Location, $Size) {
-        $combobox = New-Object System.Windows.Forms.ComboBox; $combobox.Location = $Location; $combobox.Size = $Size; $combobox.Font = $commonFont; $combobox.BackColor = $controlBackColor; $combobox.ForeColor = $controlForeColor; $combobox.FlatStyle = "Flat"; return $combobox
+        $combobox = New-Object System.Windows.Forms.ComboBox
+        $combobox.Location = $Location
+        $combobox.Size = $Size
+        $combobox.Font = $commonFont
+        $combobox.BackColor = $controlBackColor
+        $combobox.ForeColor = $controlForeColor
+        $combobox.FlatStyle = "Flat"
+        return $combobox
     }
+    
     function New-StyledCheckBox($Text, $Location, $Checked) {
-        $checkbox = New-Object System.Windows.Forms.CheckBox; $checkbox.Text = $Text; $checkbox.Location = $Location; $checkbox.Font = $commonFont; $checkbox.ForeColor = $labelColor; $checkbox.AutoSize = $true; $checkbox.Checked = $Checked; return $checkbox
+        $checkbox = New-Object System.Windows.Forms.CheckBox
+        $checkbox.Text = $Text
+        $checkbox.Location = $Location
+        $checkbox.Font = $commonFont
+        $checkbox.ForeColor = $labelColor
+        $checkbox.AutoSize = $true
+        $checkbox.Checked = $Checked
+        return $checkbox
     }
+    
     function New-StyledGroupBox($Text, $Location, $Size) {
-        $groupbox = New-Object System.Windows.Forms.GroupBox; $groupbox.Text = $Text; $groupbox.Location = $Location; $groupbox.Size = $Size; $groupbox.Font = $commonFont; $groupbox.ForeColor = $groupboxForeColor; return $groupbox
+        $groupbox = New-Object System.Windows.Forms.GroupBox
+        $groupbox.Text = $Text
+        $groupbox.Location = $Location
+        $groupbox.Size = $Size
+        $groupbox.Font = $commonFont
+        $groupbox.ForeColor = $groupboxForeColor
+        return $groupbox
     }
     
     # --- Tab 1: General Settings ---
-    $tabGeneral = New-Object System.Windows.Forms.TabPage; $tabGeneral.Text = "General"; $tabGeneral.BackColor = $form.BackColor; $tabControl.Controls.Add($tabGeneral) | Out-Null
+    $tabGeneral = New-Object System.Windows.Forms.TabPage
+    $tabGeneral.Text = "General"
+    $tabGeneral.BackColor = $form.BackColor
+    $tabControl.Controls.Add($tabGeneral) | Out-Null
     $yPos = 30
-    $tabGeneral.Controls.Add((New-StyledLabel -Text "Computer Name:" -Location "20,$yPos")) | Out-Null; $textComputerName = New-StyledTextBox -Location "180,$yPos" -Size "280,20"; $textComputerName.Text = "DESKTOP-PC"; $tabGeneral.Controls.Add($textComputerName) | Out-Null; $yPos += 40
-    $tabGeneral.Controls.Add((New-StyledLabel -Text "Admin User Name:" -Location "20,$yPos")) | Out-Null; $textUserName = New-StyledTextBox -Location "180,$yPos" -Size "280,20"; $textUserName.Text = "Admin"; $tabGeneral.Controls.Add($textUserName) | Out-Null; $yPos += 40
     
-    $tabGeneral.Controls.Add((New-StyledLabel -Text "Password:" -Location "20,$yPos")) | Out-Null
+    # Computer Name
+    $tabGeneral.Controls.Add((New-StyledLabel -Text "Computer Name:" -Location "20,$yPos")) | Out-Null
+    $textComputerName = New-StyledTextBox -Location "180,$yPos" -Size "280,20"
+    $textComputerName.Text = "DESKTOP-PC"
+    $tabGeneral.Controls.Add($textComputerName) | Out-Null
+    $labelComputerNameError = New-StyledLabel -Text "" -Location "470,$yPos" -Size "300,20"
+    $labelComputerNameError.ForeColor = $errorColor
+    $tabGeneral.Controls.Add($labelComputerNameError) | Out-Null
+    $toolTip.SetToolTip($textComputerName, "Enter a name for the computer (15 characters max, no special characters except hyphen).")
+    
+    # Validate computer name
+    $textComputerName.Add_TextChanged({
+        $value = $textComputerName.Text
+        $labelComputerNameError.Text = ""
+        
+        if ($value.Length -gt 15) {
+            $labelComputerNameError.Text = "Too long (max 15 chars)"
+        } elseif ($value -match '[^a-zA-Z0-9-]') {
+            $labelComputerNameError.Text = "Invalid characters"
+        } elseif ($value -match '^-|-$') {
+            $labelComputerNameError.Text = "Cannot start/end with hyphen"
+        }
+    })
+    $yPos += 40
+    
+    # Admin User Name
+    $tabGeneral.Controls.Add((New-StyledLabel -Text "Admin User Name:" -Location "20,$yPos")) | Out-Null
+    $textUserName = New-StyledTextBox -Location "180,$yPos" -Size "280,20"
+    $textUserName.Text = "Admin"
+    $tabGeneral.Controls.Add($textUserName) | Out-Null
+    $labelUserNameError = New-StyledLabel -Text "" -Location "470,$yPos" -Size "300,20"
+    $labelUserNameError.ForeColor = $errorColor
+    $tabGeneral.Controls.Add($labelUserNameError) | Out-Null
+    $toolTip.SetToolTip($textUserName, "Enter a username for the administrator account.")
+    
+    # Validate username
+    $textUserName.Add_TextChanged({
+        $value = $textUserName.Text
+        $labelUserNameError.Text = ""
+        
+        if ($value.Length -eq 0) {
+            $labelUserNameError.Text = "Username cannot be empty"
+        } elseif ($value.Length -gt 20) {
+            $labelUserNameError.Text = "Too long (max 20 chars)"
+        } elseif ($value -match '[./\\[\]:;|=,+*?<>]') {
+            $labelUserNameError.Text = "Invalid characters"
+        } elseif ($value -eq "Administrator" -or $value -eq "Guest") {
+            $labelUserNameError.Text = "Reserved username"
+        }
+    })
+    $yPos += 40
+
+    # Password
+    $tabGeneral.Controls.Add((New-StyledLabel -Text "Password (optional):" -Location "20,$yPos")) | Out-Null
     $textPassword = New-StyledTextBox -Location "180,$yPos" -Size "280,20"
     $textPassword.UseSystemPasswordChar = $true
     $textPassword.MaxLength = 127
     $tabGeneral.Controls.Add($textPassword) | Out-Null
     $labelPasswordCounter = New-StyledLabel -Text "0/127" -Location "470,$yPos"
     $tabGeneral.Controls.Add($labelPasswordCounter) | Out-Null
+    $labelPasswordError = New-StyledLabel -Text "" -Location "530,$yPos" -Size "240,20"
+    $labelPasswordError.ForeColor = $errorColor
+    $tabGeneral.Controls.Add($labelPasswordError) | Out-Null
+    $toolTip.SetToolTip($textPassword, "Enter a password for the administrator account (optional). If left blank, no password will be set.")
+    
+    # Password strength indicator
+    $passwordStrengthLabel = New-StyledLabel -Text "" -Location "180,$($yPos+25)" -Size "280,20"
+    $tabGeneral.Controls.Add($passwordStrengthLabel) | Out-Null
+    
+    # Validate password
     $textPassword.Add_TextChanged({
         $length = $textPassword.Text.Length
         $labelPasswordCounter.Text = "$length/127"
+        $labelPasswordError.Text = ""
+        $passwordStrengthLabel.Text = ""
+        
         if ($length -eq 127) {
             $labelPasswordCounter.ForeColor = [System.Drawing.Color]::Crimson
         } else {
             $labelPasswordCounter.ForeColor = $labelColor
         }
+        
+        # Password strength check (only if password is provided)
+        if ($length -gt 0) {
+            $strength = 0
+            if ($length -ge 8) { $strength++ }
+            if ($textPassword.Text -match '[A-Z]') { $strength++ }
+            if ($textPassword.Text -match '[a-z]') { $strength++ }
+            if ($textPassword.Text -match '[0-9]') { $strength++ }
+            if ($textPassword.Text -match '[^a-zA-Z0-9]') { $strength++ }
+            
+            switch ($strength) {
+                0 { $passwordStrengthLabel.Text = "Very Weak"; $passwordStrengthLabel.ForeColor = [System.Drawing.Color]::Crimson }
+                1 { $passwordStrengthLabel.Text = "Weak"; $passwordStrengthLabel.ForeColor = [System.Drawing.Color]::OrangeRed }
+                2 { $passwordStrengthLabel.Text = "Fair"; $passwordStrengthLabel.ForeColor = [System.Drawing.Color]::Orange }
+                3 { $passwordStrengthLabel.Text = "Good"; $passwordStrengthLabel.ForeColor = [System.Drawing.Color]::YellowGreen }
+                4 { $passwordStrengthLabel.Text = "Strong"; $passwordStrengthLabel.ForeColor = [System.Drawing.Color]::Green }
+                5 { $passwordStrengthLabel.Text = "Very Strong"; $passwordStrengthLabel.ForeColor = [System.Drawing.Color]::DarkGreen }
+            }
+            
+            if ($length -lt 8) {
+                $labelPasswordError.Text = "Weak (min 8 chars recommended)"
+            }
+        } else {
+            $passwordStrengthLabel.Text = "No password will be set"
+            $passwordStrengthLabel.ForeColor = [System.Drawing.Color]::Gray
+        }
     })
-    $yPos += 40
+    $yPos += 50
 
     # --- Tab 2: Regional Settings ---
-    $tabRegional = New-Object System.Windows.Forms.TabPage; $tabRegional.Text = "Regional"; $tabRegional.BackColor = $form.BackColor; $tabRegional.Padding = New-Object System.Windows.Forms.Padding(10)
+    $tabRegional = New-Object System.Windows.Forms.TabPage
+    $tabRegional.Text = "Regional"
+    $tabRegional.BackColor = $form.BackColor
+    $tabRegional.Padding = New-Object System.Windows.Forms.Padding(10)
     $tabControl.Controls.Add($tabRegional) | Out-Null
 
     $groupLocale = New-StyledGroupBox "Language & Locale" "15,15" "750,150"
@@ -1928,21 +2128,57 @@ function Create-UnattendXml {
     $yPos = 30
     $commonLocales = @("ar-SA", "cs-CZ", "da-DK", "de-DE", "el-GR", "en-GB", "en-US", "es-ES", "es-MX", "fi-FI", "fr-CA", "fr-FR", "he-IL", "hu-HU", "it-IT", "ja-JP", "ko-KR", "nb-NO", "nl-NL", "pl-PL", "pt-BR", "pt-PT", "ro-RO", "ru-RU", "sk-SK", "sv-SE", "th-TH", "tr-TR", "zh-CN", "zh-TW")
     
-    $groupLocale.Controls.Add((New-StyledLabel -Text "UI Language:" -Location "15,$yPos")) | Out-Null; $comboUiLanguage = New-StyledComboBox -Location "150,$yPos" -Size "250,20"; $comboUiLanguage.Items.AddRange($commonLocales) | Out-Null; $comboUiLanguage.Text = (Get-UICulture).Name; $groupLocale.Controls.Add($comboUiLanguage) | Out-Null
+    # UI Language
+    $groupLocale.Controls.Add((New-StyledLabel -Text "UI Language:" -Location "15,$yPos")) | Out-Null
+    $comboUiLanguage = New-StyledComboBox -Location "150,$yPos" -Size "250,20"
+    $comboUiLanguage.Items.AddRange($commonLocales) | Out-Null
+    $comboUiLanguage.Text = (Get-UICulture).Name
+    $groupLocale.Controls.Add($comboUiLanguage) | Out-Null
     $groupLocale.Controls.Add((New-StyledLabel -Text "(e.g., en-US, de-DE)" -Location "410,$yPos")) | Out-Null
+    $toolTip.SetToolTip($comboUiLanguage, "Select the language for the user interface.")
     $yPos += 40
-    $groupLocale.Controls.Add((New-StyledLabel -Text "System Locale:" -Location "15,$yPos")) | Out-Null; $comboSystemLocale = New-StyledComboBox -Location "150,$yPos" -Size "250,20"; $comboSystemLocale.Items.AddRange($commonLocales) | Out-Null; $comboSystemLocale.Text = (Get-Culture).Name; $groupLocale.Controls.Add($comboSystemLocale) | Out-Null
+    
+    # System Locale
+    $groupLocale.Controls.Add((New-StyledLabel -Text "System Locale:" -Location "15,$yPos")) | Out-Null
+    $comboSystemLocale = New-StyledComboBox -Location "150,$yPos" -Size "250,20"
+    $comboSystemLocale.Items.AddRange($commonLocales) | Out-Null
+    $comboSystemLocale.Text = (Get-Culture).Name
+    $groupLocale.Controls.Add($comboSystemLocale) | Out-Null
     $groupLocale.Controls.Add((New-StyledLabel -Text "(e.g., en-US, ja-JP)" -Location "410,$yPos")) | Out-Null
+    $toolTip.SetToolTip($comboSystemLocale, "Select the system locale for non-Unicode programs.")
     $yPos += 40
-    $groupLocale.Controls.Add((New-StyledLabel -Text "User Locale:" -Location "15,$yPos")) | Out-Null; $comboUserLocale = New-StyledComboBox -Location "150,$yPos" -Size "250,20"; $comboUserLocale.Items.AddRange($commonLocales) | Out-Null; $comboUserLocale.Text = (Get-Culture).Name; $groupLocale.Controls.Add($comboUserLocale) | Out-Null
+    
+    # User Locale
+    $groupLocale.Controls.Add((New-StyledLabel -Text "User Locale:" -Location "15,$yPos")) | Out-Null
+    $comboUserLocale = New-StyledComboBox -Location "150,$yPos" -Size "250,20"
+    $comboUserLocale.Items.AddRange($commonLocales) | Out-Null
+    $comboUserLocale.Text = (Get-Culture).Name
+    $groupLocale.Controls.Add($comboUserLocale) | Out-Null
     $groupLocale.Controls.Add((New-StyledLabel -Text "(e.g., en-US, tr-TR)" -Location "410,$yPos")) | Out-Null
+    $toolTip.SetToolTip($comboUserLocale, "Select the user locale for numbers, currency, date, and time formats.")
 
+    # Time Zone Group
     $groupTimeZone = New-StyledGroupBox "Time Zone" "15,180" "750,220"
     $tabRegional.Controls.Add($groupTimeZone) | Out-Null
     $yPos = 30
-    $groupTimeZone.Controls.Add((New-StyledLabel -Text "Search:" -Location "15,$yPos")) | Out-Null; $textTimeZoneSearch = New-StyledTextBox -Location "85,$yPos" -Size "645,20"; $groupTimeZone.Controls.Add($textTimeZoneSearch) | Out-Null; $yPos += 35
-    $listTimeZone = New-Object System.Windows.Forms.ListBox; $listTimeZone.Location = "15,$yPos"; $listTimeZone.Size = "715,100"; $listTimeZone.Font = $commonFont; $listTimeZone.BackColor = $controlBackColor; $listTimeZone.ForeColor = $controlForeColor
     
+    # Time Zone Search
+    $groupTimeZone.Controls.Add((New-StyledLabel -Text "Search:" -Location "15,$yPos")) | Out-Null
+    $textTimeZoneSearch = New-StyledTextBox -Location "85,$yPos" -Size "645,20"
+    $groupTimeZone.Controls.Add($textTimeZoneSearch) | Out-Null
+    $toolTip.SetToolTip($textTimeZoneSearch, "Type to filter time zones by name or offset.")
+    $yPos += 35
+    
+    # Time Zone List
+    $listTimeZone = New-Object System.Windows.Forms.ListBox
+    $listTimeZone.Location = "15,$yPos"
+    $listTimeZone.Size = "715,100"
+    $listTimeZone.Font = $commonFont
+    $listTimeZone.BackColor = $controlBackColor
+    $listTimeZone.ForeColor = $controlForeColor
+    $toolTip.SetToolTip($listTimeZone, "Select your time zone from the list.")
+    
+    # Windows 11 Time Zone IDs
     $windows11TimeZoneIds = @(
         "Dateline Standard Time", "UTC-11", "Aleutian Standard Time", "Hawaiian Standard Time", 
         "Marquesas Standard Time", "Alaskan Standard Time", "UTC-09", "Pacific Standard Time (Mexico)", 
@@ -1981,6 +2217,7 @@ function Create-UnattendXml {
         "Samoa Standard Time", "Line Islands Standard Time"
     )
 
+    # Get all time zones with fallback
     $allTimeZonesInfo = try { 
         $windows11TimeZoneIds | ForEach-Object { [System.TimeZoneInfo]::FindSystemTimeZoneById($_) }
     } catch { 
@@ -1988,6 +2225,7 @@ function Create-UnattendXml {
         [System.TimeZoneInfo]::GetSystemTimeZones() 
     }
     
+    # Format time zones for display
     $formattedTimeZones = foreach ($tz in $allTimeZonesInfo) {
         $offset = $tz.BaseUtcOffset
         $offsetSign = if ($offset.Ticks -ge 0) { "+" } else { "-" }
@@ -1998,8 +2236,10 @@ function Create-UnattendXml {
     }
     $sortedFormattedTimeZones = $formattedTimezones | Sort-Object
     
+    # Populate time zone list
     if ($null -ne $sortedFormattedTimeZones) { $listTimeZone.Items.AddRange($sortedFormattedTimeZones) | Out-Null }
     
+    # Set current time zone
     try {
         $currentTimeZoneId = (Get-TimeZone).Id
         $currentFormattedTz = $timeZoneMap.GetEnumerator() | Where-Object { $_.Value -eq $currentTimeZoneId } | Select-Object -First 1 -ExpandProperty Key
@@ -2008,13 +2248,23 @@ function Create-UnattendXml {
 
     $groupTimeZone.Controls.Add($listTimeZone) | Out-Null; $yPos += $listTimeZone.Height + 10
 
+    # Selected time zone display
     $groupTimeZone.Controls.Add((New-StyledLabel -Text "Current Selection:" -Location "15,$yPos")) | Out-Null
-    $labelSelectedTimeZone = New-StyledLabel -Text "None" -Location "150,$yPos"; $labelSelectedTimeZone.ForeColor = [System.Drawing.Color]::LightSteelBlue; $labelSelectedTimeZone.AutoSize = $false; $labelSelectedTimeZone.Size = '580,20'
+    $labelSelectedTimeZone = New-StyledLabel -Text "None" -Location "150,$yPos"
+    $labelSelectedTimeZone.ForeColor = [System.Drawing.Color]::LightSteelBlue
+    $labelSelectedTimeZone.AutoSize = $false
+    $labelSelectedTimeZone.Size = '580,20'
     $groupTimeZone.Controls.Add($labelSelectedTimeZone) | Out-Null
     
+    # Time zone selection event handlers
     $listTimeZone.Add_SelectedIndexChanged({
-        if ($listTimeZone.SelectedItem) { $labelSelectedTimeZone.Text = $listTimeZone.SelectedItem } else { $labelSelectedTimeZone.Text = "None" }
+        if ($listTimeZone.SelectedItem) { 
+            $labelSelectedTimeZone.Text = $listTimeZone.SelectedItem 
+        } else { 
+            $labelSelectedTimeZone.Text = "None" 
+        }
     }) | Out-Null
+    
     $textTimeZoneSearch.Add_TextChanged({
         $selected = $listTimeZone.SelectedItem
         $listTimeZone.BeginUpdate()
@@ -2022,16 +2272,39 @@ function Create-UnattendXml {
         $searchText = $textTimeZoneSearch.Text
         $filteredTimeZones = $sortedFormattedTimeZones | Where-Object { $_ -match [regex]::Escape($searchText) }
         if ($null -ne $filteredTimeZones) { $listTimeZone.Items.AddRange($filteredTimeZones) | Out-Null }
-        if ($selected -and $listTimeZone.Items.Contains($selected)) { $listTimeZone.SelectedItem = $selected } elseif ($listTimeZone.Items.Count -gt 0) { $listTimeZone.SelectedIndex = 0 }
+        if ($selected -and $listTimeZone.Items.Contains($selected)) { 
+            $listTimeZone.SelectedItem = $selected 
+        } elseif ($listTimeZone.Items.Count -gt 0) { 
+            $listTimeZone.SelectedIndex = 0 
+        }
         $listTimeZone.EndUpdate()
     }) | Out-Null
+    
     if ($listTimeZone.SelectedItem) { $labelSelectedTimeZone.Text = $listTimeZone.SelectedItem }
 
+    # Keyboard Layouts Group
     $groupKeyboard = New-StyledGroupBox "Keyboard Layouts (select up to 5)" "15,415" "750,245"
     $tabRegional.Controls.Add($groupKeyboard) | Out-Null
     $yPos = 30
-    $groupKeyboard.Controls.Add((New-StyledLabel -Text "Search:" -Location "15,$yPos")) | Out-Null; $textKeyboardSearch = New-StyledTextBox -Location "85,$yPos" -Size "645,20"; $groupKeyboard.Controls.Add($textKeyboardSearch) | Out-Null; $yPos += 35
-    $listKeyboardLayouts = New-Object System.Windows.Forms.CheckedListBox; $listKeyboardLayouts.Location = "15,$yPos"; $listKeyboardLayouts.Size = "715,110"; $listKeyboardLayouts.Font = $commonFont; $listKeyboardLayouts.BackColor = $controlBackColor; $listKeyboardLayouts.ForeColor = $controlForeColor; $listKeyboardLayouts.CheckOnClick = $true
+    
+    # Keyboard Layout Search
+    $groupKeyboard.Controls.Add((New-StyledLabel -Text "Search:" -Location "15,$yPos")) | Out-Null
+    $textKeyboardSearch = New-StyledTextBox -Location "85,$yPos" -Size "645,20"
+    $groupKeyboard.Controls.Add($textKeyboardSearch) | Out-Null
+    $toolTip.SetToolTip($textKeyboardSearch, "Type to filter keyboard layouts by name.")
+    $yPos += 35
+    
+    # Keyboard Layouts List
+    $listKeyboardLayouts = New-Object System.Windows.Forms.CheckedListBox
+    $listKeyboardLayouts.Location = "15,$yPos"
+    $listKeyboardLayouts.Size = "715,110"
+    $listKeyboardLayouts.Font = $commonFont
+    $listKeyboardLayouts.BackColor = $controlBackColor
+    $listKeyboardLayouts.ForeColor = $controlForeColor
+    $listKeyboardLayouts.CheckOnClick = $true
+    $toolTip.SetToolTip($listKeyboardLayouts, "Select up to 5 keyboard layouts. The first selected will be the default.")
+    
+    # Keyboard layout data
     $keyboardLayoutData = @{
         "Arabic (101)"="0401:00000401"; "Bulgarian"="0402:00000402"; "Chinese (Traditional) - US Keyboard"="0404:00000404"; "Czech"="0405:00000405"; "Danish"="0406:00000406"; "German"="0407:00000407";
         "Greek"="0408:00000408"; "English (United States)"="0409:00000409"; "Spanish"="040a:0000040a"; "Finnish"="040b:0000040b"; "French"="040c:0000040c"; "Hebrew"="040d:0000040d";
@@ -2046,15 +2319,25 @@ function Create-UnattendXml {
     $listKeyboardLayouts.Items.AddRange($sortedKeyboardLayouts.Name) | Out-Null
     $groupKeyboard.Controls.Add($listKeyboardLayouts) | Out-Null; $yPos += $listKeyboardLayouts.Height + 10
 
+    # Selected keyboard layouts display
     $groupKeyboard.Controls.Add((New-StyledLabel -Text "Current Selection:" -Location "15,$yPos")) | Out-Null
-    $labelSelectedKeyboards = New-StyledLabel -Text "None" -Location "150,$yPos"; $labelSelectedKeyboards.ForeColor = [System.Drawing.Color]::LightSteelBlue; $labelSelectedKeyboards.AutoSize = $false; $labelSelectedKeyboards.Size = '580,50'
+    $labelSelectedKeyboards = New-StyledLabel -Text "None" -Location "150,$yPos"
+    $labelSelectedKeyboards.ForeColor = [System.Drawing.Color]::LightSteelBlue
+    $labelSelectedKeyboards.AutoSize = $false
+    $labelSelectedKeyboards.Size = '580,50'
     $groupKeyboard.Controls.Add($labelSelectedKeyboards) | Out-Null
 
+    # Update keyboard label function
     $updateKeyboardLabel = {
         $checkedItemsText = ($checkedKeyboardLayoutNames | Sort-Object) -join ', '
-        if ([string]::IsNullOrWhiteSpace($checkedItemsText)) { $labelSelectedKeyboards.Text = "None" } else { $labelSelectedKeyboards.Text = $checkedItemsText }
+        if ([string]::IsNullOrWhiteSpace($checkedItemsText)) { 
+            $labelSelectedKeyboards.Text = "None" 
+        } else { 
+            $labelSelectedKeyboards.Text = $checkedItemsText 
+        }
     }
 
+    # Keyboard layout selection event handlers
     $listKeyboardLayouts.Add_ItemCheck({
         param($sender, $e)
         $itemName = $sender.Items[$e.Index]
@@ -2069,6 +2352,7 @@ function Create-UnattendXml {
             [void]$checkedKeyboardLayoutNames.Remove($itemName)
         }
     }) | Out-Null
+    
     $listKeyboardLayouts.Add_MouseUp({ & $updateKeyboardLabel }) | Out-Null
 
     $textKeyboardSearch.Add_TextChanged({
@@ -2086,6 +2370,7 @@ function Create-UnattendXml {
         $listKeyboardLayouts.EndUpdate()
     }) | Out-Null
     
+    # Set default keyboard layout
     try { 
         $currentLayoutId = (Get-WinUserLanguageList)[0].InputMethodTips[0]
         $defaultKeyboardName = ($keyboardLayoutData.GetEnumerator() | Where-Object { $_.Value -eq $currentLayoutId }).Name
@@ -2097,39 +2382,69 @@ function Create-UnattendXml {
     } catch {}; & $updateKeyboardLabel
 
     # --- Tab 3: Automation & Tweaks ---
-    $tabAutomation = New-Object System.Windows.Forms.TabPage; $tabAutomation.Text = "Automation & Tweaks"; $tabAutomation.BackColor = $form.BackColor; $tabAutomation.Padding = New-Object System.Windows.Forms.Padding(10)
+    $tabAutomation = New-Object System.Windows.Forms.TabPage
+    $tabAutomation.Text = "Automation & Tweaks"
+    $tabAutomation.BackColor = $form.BackColor
+    $tabAutomation.Padding = New-Object System.Windows.Forms.Padding(10)
     $tabControl.Controls.Add($tabAutomation) | Out-Null
 
+    # OOBE Skip Options Group
     $groupOobe = New-StyledGroupBox "OOBE Skip Options" "15,15" "750,220"
     $tabAutomation.Controls.Add($groupOobe) | Out-Null
     $yPos = 30
-    $checkHideEula = New-StyledCheckBox -Text "Hide EULA Page" -Location "20,$yPos" -Checked $true; $groupOobe.Controls.Add($checkHideEula) | Out-Null
+    
+    # Hide EULA Page
+    $checkHideEula = New-StyledCheckBox -Text "Hide EULA Page" -Location "20,$yPos" -Checked $true
+    $groupOobe.Controls.Add($checkHideEula) | Out-Null
     $toolTip.SetToolTip($checkHideEula, "Automatically accepts the End User License Agreement (EULA) during setup.")
     $yPos += 40
-    $checkHideLocalAccount = New-StyledCheckBox -Text "Hide Local Account Screen" -Location "20,$yPos" -Checked $true; $groupOobe.Controls.Add($checkHideLocalAccount) | Out-Null
+    
+    # Hide Local Account Screen
+    $checkHideLocalAccount = New-StyledCheckBox -Text "Hide Local Account Screen" -Location "20,$yPos" -Checked $true
+    $groupOobe.Controls.Add($checkHideLocalAccount) | Out-Null
     $toolTip.SetToolTip($checkHideLocalAccount, "Bypasses the screen that prompts to create a local user account.")
     $yPos += 40
-    $checkHideOnlineAccount = New-StyledCheckBox -Text "Hide Online Account Screens" -Location "20,$yPos" -Checked $true; $groupOobe.Controls.Add($checkHideOnlineAccount) | Out-Null
+    
+    # Hide Online Account Screens
+    $checkHideOnlineAccount = New-StyledCheckBox -Text "Hide Online Account Screens" -Location "20,$yPos" -Checked $true
+    $groupOobe.Controls.Add($checkHideOnlineAccount) | Out-Null
     $toolTip.SetToolTip($checkHideOnlineAccount, "Bypasses the screens that prompt to sign in with or create a Microsoft Account.")
     $yPos += 40
-    $checkHideWireless = New-StyledCheckBox -Text "Hide Wireless Setup" -Location "20,$yPos" -Checked $true; $groupOobe.Controls.Add($checkHideWireless) | Out-Null
+    
+    # Hide Wireless Setup
+    $checkHideWireless = New-StyledCheckBox -Text "Hide Wireless Setup" -Location "20,$yPos" -Checked $true
+    $groupOobe.Controls.Add($checkHideWireless) | Out-Null
     $toolTip.SetToolTip($checkHideWireless, "Skips the network and Wi-Fi connection screen during the Out-of-Box Experience (OOBE).")
 
+    # First Logon System Tweaks Group
     $groupCustom = New-StyledGroupBox "First Logon System Tweaks" "15,250" "750,220"
     $tabAutomation.Controls.Add($groupCustom) | Out-Null
     $yPos = 30
-    $checkShowFileExt = New-StyledCheckBox -Text "Show Known File Extensions" -Location "20,$yPos" -Checked $true; $groupCustom.Controls.Add($checkShowFileExt) | Out-Null
+    
+    # Show File Extensions
+    $checkShowFileExt = New-StyledCheckBox -Text "Show Known File Extensions" -Location "20,$yPos" -Checked $true
+    $groupCustom.Controls.Add($checkShowFileExt) | Out-Null
     $toolTip.SetToolTip($checkShowFileExt, "Configures File Explorer to show file extensions like '.exe', '.txt', '.dll' by default.")
     $yPos += 40
-    $checkDisableSmartScreen = New-StyledCheckBox -Text "Disable SmartScreen" -Location "20,$yPos" -Checked $true; $groupCustom.Controls.Add($checkDisableSmartScreen) | Out-Null
+    
+    # Disable SmartScreen
+    $checkDisableSmartScreen = New-StyledCheckBox -Text "Disable SmartScreen" -Location "20,$yPos" -Checked $true
+    $groupCustom.Controls.Add($checkDisableSmartScreen) | Out-Null
     $toolTip.SetToolTip($checkDisableSmartScreen, "Turns off the Microsoft Defender SmartScreen filter, which checks for malicious files and websites.")
     $yPos += 40
-    $checkDisableSysRestore = New-StyledCheckBox -Text "Disable System Restore" -Location "20,$yPos" -Checked $true; $groupCustom.Controls.Add($checkDisableSysRestore) | Out-Null
+    
+    # Disable System Restore
+    $checkDisableSysRestore = New-StyledCheckBox -Text "Disable System Restore" -Location "20,$yPos" -Checked $true
+    $groupCustom.Controls.Add($checkDisableSysRestore) | Out-Null
     $toolTip.SetToolTip($checkDisableSysRestore, "Disables the automatic creation of restore points. This can save disk space but limits recovery options.")
     $yPos += 40
-    $checkDisableSuggestions = New-StyledCheckBox -Text "Disable App Suggestions" -Location "20,$yPos" -Checked $true; $groupCustom.Controls.Add($checkDisableSuggestions) | Out-Null
+    
+    # Disable App Suggestions
+    $checkDisableSuggestions = New-StyledCheckBox -Text "Disable App Suggestions" -Location "20,$yPos" -Checked $true
+    $groupCustom.Controls.Add($checkDisableSuggestions) | Out-Null
     $toolTip.SetToolTip($checkDisableSuggestions, "Prevents Windows from displaying app and content suggestions in the Start Menu and on the lock screen.")
 
+    # Info label
     $automationInfoLabel = New-Object System.Windows.Forms.Label
     $automationInfoLabel.Text = "Hover over an option for a detailed description."
     $automationInfoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8)
@@ -2139,10 +2454,34 @@ function Create-UnattendXml {
     $tabAutomation.Controls.Add($automationInfoLabel) | Out-Null
 
     # --- Tab 4: Bloatware Removal ---
-    $tabBloatware = New-Object System.Windows.Forms.TabPage; $tabBloatware.Text = "Bloatware"; $tabBloatware.BackColor = $form.BackColor; $tabControl.Controls.Add($tabBloatware) | Out-Null
-    $bloatTopPanel = New-Object System.Windows.Forms.Panel; $bloatTopPanel.Dock = "Top"; $bloatTopPanel.Height = 40; $bloatTopPanel.BackColor = $form.BackColor; $tabBloatware.Controls.Add($bloatTopPanel) | Out-Null
-    $bloatTablePanel = New-Object System.Windows.Forms.TableLayoutPanel; $bloatTablePanel.Dock = "Fill"; $bloatTablePanel.AutoScroll = $true; $bloatTablePanel.BackColor = $form.BackColor; $tabBloatware.Controls.Add($bloatTablePanel) | Out-Null; $bloatTablePanel.BringToFront()
-    $bloatBottomPanel = New-Object System.Windows.Forms.Panel; $bloatBottomPanel.Dock = "Bottom"; $bloatBottomPanel.Height = 40; $bloatBottomPanel.BackColor = $form.BackColor; $tabBloatware.Controls.Add($bloatBottomPanel) | Out-Null
+    $tabBloatware = New-Object System.Windows.Forms.TabPage
+    $tabBloatware.Text = "Bloatware"
+    $tabBloatware.BackColor = $form.BackColor
+    $tabControl.Controls.Add($tabBloatware) | Out-Null
+    
+    # Bloatware top panel
+    $bloatTopPanel = New-Object System.Windows.Forms.Panel
+    $bloatTopPanel.Dock = "Top"
+    $bloatTopPanel.Height = 40
+    $bloatTopPanel.BackColor = $form.BackColor
+    $tabBloatware.Controls.Add($bloatTopPanel) | Out-Null
+    
+    # Bloatware table panel
+    $bloatTablePanel = New-Object System.Windows.Forms.TableLayoutPanel
+    $bloatTablePanel.Dock = "Fill"
+    $bloatTablePanel.AutoScroll = $true
+    $bloatTablePanel.BackColor = $form.BackColor
+    $tabBloatware.Controls.Add($bloatTablePanel) | Out-Null
+    $bloatTablePanel.BringToFront()
+    
+    # Bloatware bottom panel
+    $bloatBottomPanel = New-Object System.Windows.Forms.Panel
+    $bloatBottomPanel.Dock = "Bottom"
+    $bloatBottomPanel.Height = 40
+    $bloatBottomPanel.BackColor = $form.BackColor
+    $tabBloatware.Controls.Add($bloatBottomPanel) | Out-Null
+    
+    # Bloatware checkboxes
     $bloatwareCheckboxes = @()
     $bloatwareList = @(
         '3D Viewer', 'Bing Search', 'Calculator', 'Camera', 'Clipchamp', 'Clock', 'Copilot', 'Cortana', 'Dev Home',
@@ -2155,27 +2494,195 @@ function Create-UnattendXml {
         'Windows Fax and Scan', 'Windows Hello', 'Windows Media Player (classic)', 'Windows Media Player (modern)',
         'Windows Terminal', 'WordPad', 'Xbox Apps', 'Your Phone / Phone Link'
     ) | Sort-Object
-    $bloatTablePanel.ColumnCount = 3; $rowsNeeded = [math]::Ceiling($bloatwareList.Count / $bloatTablePanel.ColumnCount); $bloatTablePanel.RowCount = $rowsNeeded
-    for ($i = 0; $i -lt $bloatTablePanel.ColumnCount; $i++) { $bloatTablePanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33.33))) | Out-Null }
-    for ($i = 0; $i -lt $bloatTablePanel.RowCount; $i++) { $bloatTablePanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null }
+    
+    # Create bloatware table layout
+    $bloatTablePanel.ColumnCount = 3
+    $rowsNeeded = [math]::Ceiling($bloatwareList.Count / $bloatTablePanel.ColumnCount)
+    $bloatTablePanel.RowCount = $rowsNeeded
+    for ($i = 0; $i -lt $bloatTablePanel.ColumnCount; $i++) { 
+        $bloatTablePanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 33.33))) | Out-Null 
+    }
+    for ($i = 0; $i -lt $bloatTablePanel.RowCount; $i++) { 
+        $bloatTablePanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize))) | Out-Null 
+    }
+    
+    # Add bloatware checkboxes
     $col = 0; $row = 0
     foreach ($appName in $bloatwareList) {
-        $checkbox = New-StyledCheckBox -Text $appName -Location "0,0" -Checked $false; $checkbox.Margin = [System.Windows.Forms.Padding]::new(10, 5, 10, 5)
-        $bloatTablePanel.Controls.Add($checkbox, $col, $row) | Out-Null; $bloatwareCheckboxes += $checkbox; $col++; if ($col -ge $bloatTablePanel.ColumnCount) { $col = 0; $row++ }
+        $checkbox = New-StyledCheckBox -Text $appName -Location "0,0" -Checked $false
+        $checkbox.Margin = [System.Windows.Forms.Padding]::new(10, 5, 10, 5)
+        $bloatTablePanel.Controls.Add($checkbox, $col, $row) | Out-Null
+        $bloatwareCheckboxes += $checkbox
+        $col++
+        if ($col -ge $bloatTablePanel.ColumnCount) { $col = 0; $row++ }
     }
-    $btnSelectAll = New-Object System.Windows.Forms.Button; $btnSelectAll.Text = "Select All"; $btnSelectAll.Size = "120,30"; $btnSelectAll.Location = "10,5"; $btnSelectAll.Font = $commonFont; $btnSelectAll.ForeColor = [System.Drawing.Color]::White; $btnSelectAll.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180); $btnSelectAll.FlatStyle = "Flat"; $btnSelectAll.FlatAppearance.BorderSize = 0
-    $btnSelectAll.add_Click({ foreach($cb in $bloatwareCheckboxes) {$cb.Checked = $true} }) | Out-Null; $bloatTopPanel.Controls.Add($btnSelectAll) | Out-Null
-    $btnDeselectAll = New-Object System.Windows.Forms.Button; $btnDeselectAll.Text = "Deselect All"; $btnDeselectAll.Size = "120,30"; $btnDeselectAll.Location = "140,5"; $btnDeselectAll.Font = $commonFont; $btnDeselectAll.ForeColor = [System.Drawing.Color]::White; $btnDeselectAll.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90); $btnDeselectAll.FlatStyle = "Flat"; $btnDeselectAll.FlatAppearance.BorderSize = 0
-    $btnDeselectAll.add_Click({ foreach($cb in $bloatwareCheckboxes) {$cb.Checked = $false} }) | Out-Null; $bloatTopPanel.Controls.Add($btnDeselectAll) | Out-Null
-    $infoLabel = New-Object System.Windows.Forms.Label; $infoLabel.Text = "Bloatware removal works best with original Win 10 and 11 ISOs. Functionality on custom images is not guaranteed."; $infoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8); $infoLabel.ForeColor = [System.Drawing.Color]::Gray; $infoLabel.Dock = "Fill"; $infoLabel.TextAlign = "MiddleCenter"; $bloatBottomPanel.Controls.Add($infoLabel) | Out-Null
+    
+    # Select All button
+    $btnSelectAll = New-Object System.Windows.Forms.Button
+    $btnSelectAll.Text = "Select All"
+    $btnSelectAll.Size = "120,30"
+    $btnSelectAll.Location = "10,5"
+    $btnSelectAll.Font = $commonFont
+    $btnSelectAll.ForeColor = [System.Drawing.Color]::White
+    $btnSelectAll.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180)
+    $btnSelectAll.FlatStyle = "Flat"
+    $btnSelectAll.FlatAppearance.BorderSize = 0
+    $btnSelectAll.add_Click({ 
+        foreach($cb in $bloatwareCheckboxes) {$cb.Checked = $true} 
+    }) | Out-Null
+    $bloatTopPanel.Controls.Add($btnSelectAll) | Out-Null
+    $toolTip.SetToolTip($btnSelectAll, "Select all bloatware items for removal.")
+    
+    # Deselect All button
+    $btnDeselectAll = New-Object System.Windows.Forms.Button
+    $btnDeselectAll.Text = "Deselect All"
+    $btnDeselectAll.Size = "120,30"
+    $btnDeselectAll.Location = "140,5"
+    $btnDeselectAll.Font = $commonFont
+    $btnDeselectAll.ForeColor = [System.Drawing.Color]::White
+    $btnDeselectAll.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
+    $btnDeselectAll.FlatStyle = "Flat"
+    $btnDeselectAll.FlatAppearance.BorderSize = 0
+    $btnDeselectAll.add_Click({ 
+        foreach($cb in $bloatwareCheckboxes) {$cb.Checked = $false} 
+    }) | Out-Null
+    $bloatTopPanel.Controls.Add($btnDeselectAll) | Out-Null
+    $toolTip.SetToolTip($btnDeselectAll, "Deselect all bloatware items.")
+    
+    # Recommended button
+    $btnRecommended = New-Object System.Windows.Forms.Button
+    $btnRecommended.Text = "Recommended"
+    $btnRecommended.Size = "120,30"
+    $btnRecommended.Location = "270,5"
+    $btnRecommended.Font = $commonFont
+    $btnRecommended.ForeColor = [System.Drawing.Color]::White
+    $btnRecommended.BackColor = [System.Drawing.Color]::FromArgb(60, 120, 60)
+    $btnRecommended.FlatStyle = "Flat"
+    $btnRecommended.FlatAppearance.BorderSize = 0
+    $btnRecommended.add_Click({ 
+        # Deselect all first
+        foreach($cb in $bloatwareCheckboxes) {$cb.Checked = $false}
+        
+        # Select recommended items
+        $recommendedItems = @(
+            '3D Viewer', 'Clipchamp', 'Copilot', 'Cortana', 'Dev Home', 'Feedback Hub', 'Get Help', 
+            'Mail and Calendar', 'Mixed Reality', 'Movies & TV', 'News', 'Notepad (modern)', 
+            'Office 365', 'OneDrive', 'OneNote', 'Paint 3D', 'People', 'Power Automate', 
+            'Skype', 'Solitaire Collection', 'Teams', 'Tips', 'To Do', 'Voice Recorder', 
+            'Wallet', 'Weather', 'Windows Media Player (modern)', 'Xbox Apps', 'Your Phone / Phone Link'
+        )
+        
+        foreach($cb in $bloatwareCheckboxes) {
+            if ($recommendedItems -contains $cb.Text) {
+                $cb.Checked = $true
+            }
+        }
+    }) | Out-Null
+    $bloatTopPanel.Controls.Add($btnRecommended) | Out-Null
+    $toolTip.SetToolTip($btnRecommended, "Select commonly recommended bloatware items for removal.")
+    
+    # Info label
+    $infoLabel = New-Object System.Windows.Forms.Label
+    $infoLabel.Text = "Bloatware removal works best with original Win 10 and 11 ISOs. Functionality on custom images is not guaranteed."
+    $infoLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $infoLabel.ForeColor = [System.Drawing.Color]::Gray
+    $infoLabel.Dock = "Fill"
+    $infoLabel.TextAlign = "MiddleCenter"
+    $bloatBottomPanel.Controls.Add($infoLabel) | Out-Null
 
     # --- Create and Cancel Buttons ---
-    $buttonCreate = New-Object System.Windows.Forms.Button; $buttonCreate.Text = "Create"; $buttonCreate.Size = "120,30"; $buttonCreate.Location = "265,10"; $buttonCreate.Font = $commonFont; $buttonCreate.ForeColor = [System.Drawing.Color]::White; $buttonCreate.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180); $buttonCreate.FlatStyle = "Flat"; $buttonCreate.FlatAppearance.BorderSize = 0;
-    $buttonCreate.add_Click({$form.DialogResult = [System.Windows.Forms.DialogResult]::OK; $form.Close()}) | Out-Null
+    $buttonCreate = New-Object System.Windows.Forms.Button
+    $buttonCreate.Text = "Create"
+    $buttonCreate.Size = "120,30"
+    $buttonCreate.Location = "265,10"
+    $buttonCreate.Font = $commonFont
+    $buttonCreate.ForeColor = [System.Drawing.Color]::White
+    $buttonCreate.BackColor = [System.Drawing.Color]::FromArgb(70, 130, 180)
+    $buttonCreate.FlatStyle = "Flat"
+    $buttonCreate.FlatAppearance.BorderSize = 0
+    $buttonCreate.add_Click({
+        # Validate all inputs before proceeding
+        $validationErrors = @()
+        
+        # Validate computer name
+        if ([string]::IsNullOrWhiteSpace($textComputerName.Text)) {
+            $validationErrors += "Computer name cannot be empty"
+        } elseif ($textComputerName.Text.Length -gt 15) {
+            $validationErrors += "Computer name too long (max 15 characters)"
+        } elseif ($textComputerName.Text -match '[^a-zA-Z0-9-]') {
+            $validationErrors += "Computer name contains invalid characters"
+        } elseif ($textComputerName.Text -match '^-|-$') {
+            $validationErrors += "Computer name cannot start or end with a hyphen"
+        }
+        
+        # Validate username
+        if ([string]::IsNullOrWhiteSpace($textUserName.Text)) {
+            $validationErrors += "Username cannot be empty"
+        } elseif ($textUserName.Text.Length -gt 20) {
+            $validationErrors += "Username too long (max 20 characters)"
+        } elseif ($textUserName.Text -match '[./\\[\]:;|=,+*?<>]') {
+            $validationErrors += "Username contains invalid characters"
+        } elseif ($textUserName.Text -eq "Administrator" -or $textUserName.Text -eq "Guest") {
+            $validationErrors += "Cannot use reserved username"
+        }
+        
+        # Password is now optional, but if provided, validate strength
+        if ($textPassword.Text.Length -gt 0 -and $textPassword.Text.Length -lt 8) {
+            $validationErrors += "Password too short (min 8 characters)"
+        }
+        
+        # Validate regional settings
+        if ([string]::IsNullOrWhiteSpace($comboUiLanguage.Text)) {
+            $validationErrors += "UI Language must be selected"
+        }
+        
+        if ([string]::IsNullOrWhiteSpace($comboSystemLocale.Text)) {
+            $validationErrors += "System Locale must be selected"
+        }
+        
+        if ([string]::IsNullOrWhiteSpace($comboUserLocale.Text)) {
+            $validationErrors += "User Locale must be selected"
+        }
+        
+        if ($null -eq $listTimeZone.SelectedItem) {
+            $validationErrors += "Time Zone must be selected"
+        }
+        
+        if ($checkedKeyboardLayoutNames.Count -eq 0) {
+            $validationErrors += "At least one keyboard layout must be selected"
+        }
+        
+        # Show validation errors if any
+        if ($validationErrors.Count -gt 0) {
+            $errorMessage = "Please correct the following errors:`n`n" + ($validationErrors -join "`n")
+            [System.Windows.Forms.MessageBox]::Show($errorMessage, "Validation Failed", "OK", "Error") | Out-Null
+            Write-LogAndHost "XML creation aborted due to validation errors." -HostColor Red -LogPrefix "Create-UnattendXml"
+            return
+        }
+        
+        # If all validations pass, close the form with OK result
+        $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
+        $form.Close()
+    }) | Out-Null
     $buttonPanel.Controls.Add($buttonCreate) | Out-Null
-    $buttonCancel = New-Object System.Windows.Forms.Button; $buttonCancel.Text = "Cancel"; $buttonCancel.Size = "120,30"; $buttonCancel.Location = "395,10"; $buttonCancel.Font = $commonFont; $buttonCancel.ForeColor = [System.Drawing.Color]::White; $buttonCancel.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90); $buttonCancel.FlatStyle = "Flat"; $buttonCancel.FlatAppearance.BorderSize = 0;
-    $buttonCancel.add_Click({$form.Close()}) | Out-Null; $buttonPanel.Controls.Add($buttonCancel) | Out-Null
+    $toolTip.SetToolTip($buttonCreate, "Generate the autounattend.xml file with your selected settings.")
+    
+    $buttonCancel = New-Object System.Windows.Forms.Button
+    $buttonCancel.Text = "Cancel"
+    $buttonCancel.Size = "120,30"
+    $buttonCancel.Location = "395,10"
+    $buttonCancel.Font = $commonFont
+    $buttonCancel.ForeColor = [System.Drawing.Color]::White
+    $buttonCancel.BackColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
+    $buttonCancel.FlatStyle = "Flat"
+    $buttonCancel.FlatAppearance.BorderSize = 0
+    $buttonCancel.add_Click({
+        $form.Close()
+    }) | Out-Null
+    $buttonPanel.Controls.Add($buttonCancel) | Out-Null
+    $toolTip.SetToolTip($buttonCancel, "Cancel and return to the main menu.")
 
+    # Show the form and handle the result
     try {
         $result = $form.ShowDialog()
     }
@@ -2188,46 +2695,78 @@ function Create-UnattendXml {
     }
     
     if ($result -ne [System.Windows.Forms.DialogResult]::OK) {
-        Write-LogAndHost "XML creation cancelled by user." -HostColor Yellow; Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host; return
+        Write-LogAndHost "XML creation cancelled by user." -HostColor Yellow
+        Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+        $null = Read-Host
+        return
     }
 
+    # Collect form data
     $selectedKeyboardLayouts = $checkedKeyboardLayoutNames | ForEach-Object { $keyboardLayoutData[$_] }
     $selectedTimeZoneId = if ($listTimeZone.SelectedItem) { $timeZoneMap[$listTimeZone.SelectedItem] } else { $null }
 
     $formData = @{
-        ComputerName = $textComputerName.Text; UserName = $textUserName.Text; Password = $textPassword.Text
-        UiLanguage = $comboUiLanguage.Text; SystemLocale = $comboSystemLocale.Text; UserLocale = $comboUserLocale.Text
+        ComputerName = $textComputerName.Text
+        UserName = $textUserName.Text
+        Password = $textPassword.Text
+        UiLanguage = $comboUiLanguage.Text
+        SystemLocale = $comboSystemLocale.Text
+        UserLocale = $comboUserLocale.Text
         TimeZone = $selectedTimeZoneId
         KeyboardLayouts = $selectedKeyboardLayouts -join ';'
-        HideEula = $checkHideEula.Checked; HideLocalAccount = $checkHideLocalAccount.Checked; HideOnlineAccount = $checkHideOnlineAccount.Checked; HideWireless = $checkHideWireless.Checked
-        ShowFileExt = $checkShowFileExt.Checked; DisableSmartScreen = $checkDisableSmartScreen.Checked; DisableSysRestore = $checkDisableSysRestore.Checked; DisableSuggestions = $checkDisableSuggestions.Checked
+        HideEula = $checkHideEula.Checked
+        HideLocalAccount = $checkHideLocalAccount.Checked
+        HideOnlineAccount = $checkHideOnlineAccount.Checked
+        HideWireless = $checkHideWireless.Checked
+        ShowFileExt = $checkShowFileExt.Checked
+        DisableSmartScreen = $checkDisableSmartScreen.Checked
+        DisableSysRestore = $checkDisableSysRestore.Checked
+        DisableSuggestions = $checkDisableSuggestions.Checked
         BloatwareToRemove = ($bloatwareCheckboxes | Where-Object { $_.Checked } | ForEach-Object { $_.Text })
     }
 
+    # Final validation (redundant but safe)
     if ([string]::IsNullOrWhiteSpace($formData.ComputerName) -or [string]::IsNullOrWhiteSpace($formData.UserName) -or `
         [string]::IsNullOrWhiteSpace($formData.UiLanguage) -or [string]::IsNullOrWhiteSpace($formData.SystemLocale) -or `
         [string]::IsNullOrWhiteSpace($formData.UserLocale) -or [string]::IsNullOrWhiteSpace($formData.TimeZone) -or `
         $selectedKeyboardLayouts.Count -eq 0) {
         [System.Windows.Forms.MessageBox]::Show("Please fill in all general and regional settings, including at least one keyboard layout.", "Validation Failed", "OK", "Error") | Out-Null
         Write-LogAndHost "XML creation aborted due to missing required fields." -HostColor Red -LogPrefix "Create-UnattendXml"
-        Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray; $null = Read-Host; return
+        Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+        $null = Read-Host
+        return
     }
 
+    # Create the XML file
     $desktopPath = [Environment]::GetFolderPath("Desktop")
     $filePath = Join-Path -Path $desktopPath -ChildPath "autounattend.xml"
     Write-LogAndHost "Creating XML structure based on GUI selections..." -NoHost
         
     $xml = New-Object System.Xml.XmlDocument
     $xml.AppendChild($xml.CreateXmlDeclaration("1.0", "utf-8", $null)) | Out-Null
-    $root = $xml.CreateElement("unattend"); $root.SetAttribute("xmlns", "urn:schemas-microsoft-com:unattend"); $xml.AppendChild($root) | Out-Null
-    $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable); $ns.AddNamespace("d6p1", "http://schemas.microsoft.com/WMIConfig/2002/State")
+    $root = $xml.CreateElement("unattend")
+    $root.SetAttribute("xmlns", "urn:schemas-microsoft-com:unattend")
+    $xml.AppendChild($root) | Out-Null
+    $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
+    $ns.AddNamespace("d6p1", "http://schemas.microsoft.com/WMIConfig/2002/State")
     
+    # Helper function to create components
     function New-Component($ParentNode, $Name, $Pass, $Token="31bf3856ad364e35", $Arch="amd64") {
         $settings = $ParentNode.SelectSingleNode("//unattend/settings[@pass='$Pass']")
-        if (-not $settings) { $settings = $ParentNode.OwnerDocument.CreateElement("settings"); $settings.SetAttribute("pass", $Pass); $ParentNode.AppendChild($settings) | Out-Null }
+        if (-not $settings) { 
+            $settings = $ParentNode.OwnerDocument.CreateElement("settings")
+            $settings.SetAttribute("pass", $Pass)
+            $ParentNode.AppendChild($settings) | Out-Null
+        }
+        
         $component = $settings.SelectSingleNode("component[@name='$Name']")
         if (-not $component) {
-            $component = $ParentNode.OwnerDocument.CreateElement("component"); $component.SetAttribute("name", $Name); $component.SetAttribute("processorArchitecture", $Arch); $component.SetAttribute("publicKeyToken", $Token); $component.SetAttribute("language", "neutral"); $component.SetAttribute("versionScope", "nonSxS")
+            $component = $ParentNode.OwnerDocument.CreateElement("component")
+            $component.SetAttribute("name", $Name)
+            $component.SetAttribute("processorArchitecture", $Arch)
+            $component.SetAttribute("publicKeyToken", $Token)
+            $component.SetAttribute("language", "neutral")
+            $component.SetAttribute("versionScope", "nonSxS")
             $settings.AppendChild($component) | Out-Null
         }
         return $component
@@ -2261,34 +2800,130 @@ function Create-UnattendXml {
 
     $userAccounts = $compShellOobe.AppendChild($xml.CreateElement("UserAccounts"))
     $localAccount = $userAccounts.AppendChild($xml.CreateElement("LocalAccounts")).AppendChild($xml.CreateElement("LocalAccount"))
-    $localAccount.SetAttribute("action", $ns.LookupNamespace("d6p1"), "add"); $localAccount.AppendChild($xml.CreateElement("Name")).InnerText = $formData.UserName
-    $localAccount.AppendChild($xml.CreateElement("Group")).InnerText = "Administrators"; $localAccount.AppendChild($xml.CreateElement("DisplayName")).InnerText = $formData.UserName
-    $passwordNode = $localAccount.AppendChild($xml.CreateElement("Password")); $passwordNode.AppendChild($xml.CreateElement("Value")).InnerText = $formData.Password; $passwordNode.AppendChild($xml.CreateElement("PlainText")).InnerText = "true"
+    $localAccount.SetAttribute("action", $ns.LookupNamespace("d6p1"), "add")
+    $localAccount.AppendChild($xml.CreateElement("Name")).InnerText = $formData.UserName
+    $localAccount.AppendChild($xml.CreateElement("Group")).InnerText = "Administrators"
+    $localAccount.AppendChild($xml.CreateElement("DisplayName")).InnerText = $formData.UserName
     
+    # Only add password element if a password is provided
+    if (-not [string]::IsNullOrWhiteSpace($formData.Password)) {
+        $passwordNode = $localAccount.AppendChild($xml.CreateElement("Password"))
+        $passwordNode.AppendChild($xml.CreateElement("Value")).InnerText = $formData.Password
+        $passwordNode.AppendChild($xml.CreateElement("PlainText")).InnerText = "true"
+    }
+    
+    # First Logon Commands
     $firstLogonCommands = $compShellOobe.AppendChild($xml.CreateElement("FirstLogonCommands"))
     $commandIndex = 1
     
-    if ($formData.ShowFileExt) { $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'cmd /c reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v HideFileExt /t REG_DWORD /d 0 /f' }
-    if ($formData.DisableSmartScreen) { $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'cmd /c reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" /v SmartScreenEnabled /t REG_SZ /d "Off" /f' }
-    if ($formData.DisableSysRestore) { $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'powershell.exe -Command "Disable-ComputerRestore -Drive C:\"' }
-    if ($formData.DisableSuggestions) { $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'cmd /c reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v SubscribedContent-338389Enabled /t REG_DWORD /d 0 /f' }
-
-    $bloatwareCommands = @{
-        '3D Viewer' = 'Get-AppxPackage *Microsoft.Microsoft3DViewer* | Remove-AppxPackage -AllUsers'; 'Bing Search' = 'reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v BingSearchEnabled /t REG_DWORD /d 0 /f'; 'Calculator' = 'Get-AppxPackage *Microsoft.WindowsCalculator* | Remove-AppxPackage -AllUsers'; 'Camera' = 'Get-AppxPackage *Microsoft.WindowsCamera* | Remove-AppxPackage -AllUsers'; 'Clipchamp' = 'Get-AppxPackage *Microsoft.Clipchamp* | Remove-AppxPackage -AllUsers'; 'Clock' = 'Get-AppxPackage *Microsoft.WindowsAlarms* | Remove-AppxPackage -AllUsers'; 'Copilot' = 'reg add "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f'; 'Cortana' = 'Get-AppxPackage *Microsoft.549981C3F5F10* | Remove-AppxPackage -AllUsers'; 'Dev Home' = 'Get-AppxPackage *Microsoft.DevHome* | Remove-AppxPackage -AllUsers'; 'Family' = 'Get-AppxPackage *Microsoft.Windows.Family* | Remove-AppxPackage -AllUsers'; 'Feedback Hub' = 'Get-AppxPackage *Microsoft.WindowsFeedbackHub* | Remove-AppxPackage -AllUsers'; 'Get Help' = 'Get-AppxPackage *Microsoft.GetHelp* | Remove-AppxPackage -AllUsers'; 'Handwriting (all languages)' = 'Get-WindowsCapability -Online | Where-Object { $_.Name -like "Language.Handwriting*" } | ForEach-Object { Remove-WindowsCapability -Online -Name $_.Name -NoRestart }'; 'Internet Explorer' = 'Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -NoRestart'; 'Mail and Calendar' = 'Get-AppxPackage *microsoft.windowscommunicationsapps* | Remove-AppxPackage -AllUsers'; 'Maps' = 'Get-AppxPackage *Microsoft.WindowsMaps* | Remove-AppxPackage -AllUsers'; 'Math Input Panel' = 'Remove-WindowsCapability -Online -Name "MathRecognizer~~~~0.0.1.0" -NoRestart'; 'Media Features' = 'Disable-WindowsOptionalFeature -Online -FeatureName "MediaPlayback" -NoRestart'; 'Mixed Reality' = 'Get-AppxPackage *Microsoft.MixedReality.Portal* | Remove-AppxPackage -AllUsers'; 'Movies & TV' = 'Get-AppxPackage *Microsoft.ZuneVideo* | Remove-AppxPackage -AllUsers'; 'News' = 'Get-AppxPackage *Microsoft.BingNews* | Remove-AppxPackage -AllUsers'; 'Notepad (modern)' = 'Get-AppxPackage *Microsoft.WindowsNotepad* | Remove-AppxPackage -AllUsers'; 'Office 365' = 'Get-AppxPackage *Microsoft.MicrosoftOfficeHub* | Remove-AppxPackage -AllUsers'; 'OneDrive' = '$process = Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -PassThru -Wait; if ($process.ExitCode -ne 0) { Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -PassThru -Wait }'; 'OneNote' = 'Get-AppxPackage *Microsoft.Office.OneNote* | Remove-AppxPackage -AllUsers'; 'OneSync' = '# Handled by Mail and Calendar'; 'OpenSSH Client' = 'Remove-WindowsCapability -Online -Name "OpenSSH.Client~~~~0.0.1.0" -NoRestart'; 'Outlook for Windows' = 'Get-AppxPackage *Microsoft.OutlookForWindows* | Remove-AppxPackage -AllUsers'; 'Paint' = 'Get-AppxPackage *Microsoft.Paint* | Remove-AppxPackage -AllUsers'; 'Paint 3D' = 'Get-AppxPackage *Microsoft.MSPaint* | Remove-AppxPackage -AllUsers'; 'People' = 'Get-AppxPackage *Microsoft.People* | Remove-AppxPackage -AllUsers'; 'Photos' = 'Get-AppxPackage *Microsoft.Windows.Photos* | Remove-AppxPackage -AllUsers'; 'Power Automate' = 'Get-AppxPackage *Microsoft.PowerAutomateDesktop* | Remove-AppxPackage -AllUsers'; 'PowerShell 2.0' = 'Disable-WindowsOptionalFeature -Online -FeatureName "MicrosoftWindowsPowerShellV2" -NoRestart'; 'PowerShell ISE' = 'Remove-WindowsCapability -Online -Name "PowerShell-ISE-v2~~~~0.0.1.0" -NoRestart'; 'Quick Assist' = 'Get-AppxPackage *Microsoft.QuickAssist* | Remove-AppxPackage -AllUsers'; 'Recall' = 'reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" /v DisableAllScreenshotCapture /t REG_DWORD /d 1 /f'; 'Remote Desktop Client' = '# Core component, removal not recommended.'; 'Skype' = 'Get-AppxPackage *Microsoft.SkypeApp* | Remove-AppxPackage -AllUsers'; 'Snipping Tool' = 'Get-AppxPackage *Microsoft.ScreenSketch* | Remove-AppxPackage -AllUsers'; 'Solitaire Collection' = 'Get-AppxPackage *Microsoft.MicrosoftSolitaireCollection* | Remove-AppxPackage -AllUsers'; 'Speech (all languages)' = 'Get-WindowsCapability -Online | Where-Object { $_.Name -like "Language.Speech*" } | ForEach-Object { Remove-WindowsCapability -Online -Name $_.Name -NoRestart }'; 'Steps Recorder' = 'Disable-WindowsOptionalFeature -Online -FeatureName "StepsRecorder" -NoRestart'; 'Sticky Notes' = 'Get-AppxPackage *Microsoft.MicrosoftStickyNotes* | Remove-AppxPackage -AllUsers'; 'Teams' = 'Get-AppxPackage *MicrosoftTeams* | Remove-AppxPackage -AllUsers'; 'Tips' = 'Get-AppxPackage *Microsoft.Getstarted* | Remove-AppxPackage -AllUsers'; 'To Do' = 'Get-AppxPackage *Microsoft.Todos* | Remove-AppxPackage -AllUsers'; 'Voice Recorder' = 'Get-AppxPackage *Microsoft.WindowsSoundRecorder* | Remove-AppxPackage -AllUsers'; 'Wallet' = 'Get-AppxPackage *Microsoft.Wallet* | Remove-AppxPackage -AllUsers'; 'Weather' = 'Get-AppxPackage *Microsoft.BingWeather* | Remove-AppxPackage -AllUsers'; 'Windows Fax and Scan' = 'Disable-WindowsOptionalFeature -Online -FeatureName "Windows-Fax-And-Scan" -NoRestart'; 'Windows Hello' = 'reg add "HKLM\SOFTWARE\Policies\Microsoft\Biometrics" /v Enabled /t REG_DWORD /d 0 /f; reg add "HKLM\SOFTWARE\Policies\Microsoft\Biometrics\CredentialProviders" /v Enabled /t REG_DWORD /d 0 /f'; 'Windows Media Player (classic)' = 'Disable-WindowsOptionalFeature -Online -FeatureName "WindowsMediaPlayer" -NoRestart'; 'Windows Media Player (modern)' = 'Get-AppxPackage *Microsoft.ZuneMusic* | Remove-AppxPackage -AllUsers'; 'Windows Terminal' = 'Get-AppxPackage *Microsoft.WindowsTerminal* | Remove-AppxPackage -AllUsers'; 'WordPad' = 'Remove-WindowsCapability -Online -Name "WordPad~~~~0.0.1.0" -NoRestart'; 'Xbox Apps' = 'Get-AppxPackage *Microsoft.Xbox* | Remove-AppxPackage -AllUsers; Get-AppxPackage *Microsoft.GamingApp* | Remove-AppxPackage -AllUsers'; 'Your Phone / Phone Link' = 'Get-AppxPackage *Microsoft.YourPhone* | Remove-AppxPackage -AllUsers'
+    # Add system tweak commands
+    if ($formData.ShowFileExt) { 
+        $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand"))
+        $syncCmd.SetAttribute("Order", $commandIndex++)
+        $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'cmd /c reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v HideFileExt /t REG_DWORD /d 0 /f'
+    }
+    
+    if ($formData.DisableSmartScreen) { 
+        $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand"))
+        $syncCmd.SetAttribute("Order", $commandIndex++)
+        $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'cmd /c reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer" /v SmartScreenEnabled /t REG_SZ /d "Off" /f'
+    }
+    
+    if ($formData.DisableSysRestore) { 
+        $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand"))
+        $syncCmd.SetAttribute("Order", $commandIndex++)
+        $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'powershell.exe -Command "Disable-ComputerRestore -Drive C:\"'
+    }
+    
+    if ($formData.DisableSuggestions) { 
+        $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand"))
+        $syncCmd.SetAttribute("Order", $commandIndex++)
+        $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = 'cmd /c reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v SubscribedContent-338389Enabled /t REG_DWORD /d 0 /f'
     }
 
+    # Bloatware removal commands
+    $bloatwareCommands = @{
+        '3D Viewer' = 'Get-AppxPackage *Microsoft.Microsoft3DViewer* | Remove-AppxPackage -AllUsers'
+        'Bing Search' = 'reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v BingSearchEnabled /t REG_DWORD /d 0 /f'
+        'Calculator' = 'Get-AppxPackage *Microsoft.WindowsCalculator* | Remove-AppxPackage -AllUsers'
+        'Camera' = 'Get-AppxPackage *Microsoft.WindowsCamera* | Remove-AppxPackage -AllUsers'
+        'Clipchamp' = 'Get-AppxPackage *Microsoft.Clipchamp* | Remove-AppxPackage -AllUsers'
+        'Clock' = 'Get-AppxPackage *Microsoft.WindowsAlarms* | Remove-AppxPackage -AllUsers'
+        'Copilot' = 'reg add "HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot" /v TurnOffWindowsCopilot /t REG_DWORD /d 1 /f'
+        'Cortana' = 'Get-AppxPackage *Microsoft.549981C3F5F10* | Remove-AppxPackage -AllUsers'
+        'Dev Home' = 'Get-AppxPackage *Microsoft.DevHome* | Remove-AppxPackage -AllUsers'
+        'Family' = 'Get-AppxPackage *Microsoft.Windows.Family* | Remove-AppxPackage -AllUsers'
+        'Feedback Hub' = 'Get-AppxPackage *Microsoft.WindowsFeedbackHub* | Remove-AppxPackage -AllUsers'
+        'Get Help' = 'Get-AppxPackage *Microsoft.GetHelp* | Remove-AppxPackage -AllUsers'
+        'Handwriting (all languages)' = 'Get-WindowsCapability -Online | Where-Object { $_.Name -like "Language.Handwriting*" } | ForEach-Object { Remove-WindowsCapability -Online -Name $_.Name -NoRestart }'
+        'Internet Explorer' = 'Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -NoRestart'
+        'Mail and Calendar' = 'Get-AppxPackage *microsoft.windowscommunicationsapps* | Remove-AppxPackage -AllUsers'
+        'Maps' = 'Get-AppxPackage *Microsoft.WindowsMaps* | Remove-AppxPackage -AllUsers'
+        'Math Input Panel' = 'Remove-WindowsCapability -Online -Name "MathRecognizer~~~~0.0.1.0" -NoRestart'
+        'Media Features' = 'Disable-WindowsOptionalFeature -Online -FeatureName "MediaPlayback" -NoRestart'
+        'Mixed Reality' = 'Get-AppxPackage *Microsoft.MixedReality.Portal* | Remove-AppxPackage -AllUsers'
+        'Movies & TV' = 'Get-AppxPackage *Microsoft.ZuneVideo* | Remove-AppxPackage -AllUsers'
+        'News' = 'Get-AppxPackage *Microsoft.BingNews* | Remove-AppxPackage -AllUsers'
+        'Notepad (modern)' = 'Get-AppxPackage *Microsoft.WindowsNotepad* | Remove-AppxPackage -AllUsers'
+        'Office 365' = 'Get-AppxPackage *Microsoft.MicrosoftOfficeHub* | Remove-AppxPackage -AllUsers'
+        'OneDrive' = '$process = Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -PassThru -Wait; if ($process.ExitCode -ne 0) { Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -PassThru -Wait }'
+        'OneNote' = 'Get-AppxPackage *Microsoft.Office.OneNote* | Remove-AppxPackage -AllUsers'
+        'OneSync' = '# Handled by Mail and Calendar'
+        'OpenSSH Client' = 'Remove-WindowsCapability -Online -Name "OpenSSH.Client~~~~0.0.1.0" -NoRestart'
+        'Outlook for Windows' = 'Get-AppxPackage *Microsoft.OutlookForWindows* | Remove-AppxPackage -AllUsers'
+        'Paint' = 'Get-AppxPackage *Microsoft.Paint* | Remove-AppxPackage -AllUsers'
+        'Paint 3D' = 'Get-AppxPackage *Microsoft.MSPaint* | Remove-AppxPackage -AllUsers'
+        'People' = 'Get-AppxPackage *Microsoft.People* | Remove-AppxPackage -AllUsers'
+        'Photos' = 'Get-AppxPackage *Microsoft.Windows.Photos* | Remove-AppxPackage -AllUsers'
+        'Power Automate' = 'Get-AppxPackage *Microsoft.PowerAutomateDesktop* | Remove-AppxPackage -AllUsers'
+        'PowerShell 2.0' = 'Disable-WindowsOptionalFeature -Online -FeatureName "MicrosoftWindowsPowerShellV2" -NoRestart'
+        'PowerShell ISE' = 'Remove-WindowsCapability -Online -Name "PowerShell-ISE-v2~~~~0.0.1.0" -NoRestart'
+        'Quick Assist' = 'Get-AppxPackage *Microsoft.QuickAssist* | Remove-AppxPackage -AllUsers'
+        'Recall' = 'reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsAI" /v DisableAllScreenshotCapture /t REG_DWORD /d 1 /f'
+        'Remote Desktop Client' = '# Core component, removal not recommended.'
+        'Skype' = 'Get-AppxPackage *Microsoft.SkypeApp* | Remove-AppxPackage -AllUsers'
+        'Snipping Tool' = 'Get-AppxPackage *Microsoft.ScreenSketch* | Remove-AppxPackage -AllUsers'
+        'Solitaire Collection' = 'Get-AppxPackage *Microsoft.MicrosoftSolitaireCollection* | Remove-AppxPackage -AllUsers'
+        'Speech (all languages)' = 'Get-WindowsCapability -Online | Where-Object { $_.Name -like "Language.Speech*" } | ForEach-Object { Remove-WindowsCapability -Online -Name $_.Name -NoRestart }'
+        'Steps Recorder' = 'Disable-WindowsOptionalFeature -Online -FeatureName "StepsRecorder" -NoRestart'
+        'Sticky Notes' = 'Get-AppxPackage *Microsoft.MicrosoftStickyNotes* | Remove-AppxPackage -AllUsers'
+        'Teams' = 'Get-AppxPackage *MicrosoftTeams* | Remove-AppxPackage -AllUsers'
+        'Tips' = 'Get-AppxPackage *Microsoft.Getstarted* | Remove-AppxPackage -AllUsers'
+        'To Do' = 'Get-AppxPackage *Microsoft.Todos* | Remove-AppxPackage -AllUsers'
+        'Voice Recorder' = 'Get-AppxPackage *Microsoft.WindowsSoundRecorder* | Remove-AppxPackage -AllUsers'
+        'Wallet' = 'Get-AppxPackage *Microsoft.Wallet* | Remove-AppxPackage -AllUsers'
+        'Weather' = 'Get-AppxPackage *Microsoft.BingWeather* | Remove-AppxPackage -AllUsers'
+        'Windows Fax and Scan' = 'Disable-WindowsOptionalFeature -Online -FeatureName "Windows-Fax-And-Scan" -NoRestart'
+        'Windows Hello' = 'reg add "HKLM\SOFTWARE\Policies\Microsoft\Biometrics" /v Enabled /t REG_DWORD /d 0 /f; reg add "HKLM\SOFTWARE\Policies\Microsoft\Biometrics\CredentialProviders" /v Enabled /t REG_DWORD /d 0 /f'
+        'Windows Media Player (classic)' = 'Disable-WindowsOptionalFeature -Online -FeatureName "WindowsMediaPlayer" -NoRestart'
+        'Windows Media Player (modern)' = 'Get-AppxPackage *Microsoft.ZuneMusic* | Remove-AppxPackage -AllUsers'
+        'Windows Terminal' = 'Get-AppxPackage *Microsoft.WindowsTerminal* | Remove-AppxPackage -AllUsers'
+        'WordPad' = 'Remove-WindowsCapability -Online -Name "WordPad~~~~0.0.1.0" -NoRestart'
+        'Xbox Apps' = 'Get-AppxPackage *Microsoft.Xbox* | Remove-AppxPackage -AllUsers; Get-AppxPackage *Microsoft.GamingApp* | Remove-AppxPackage -AllUsers'
+        'Your Phone / Phone Link' = 'Get-AppxPackage *Microsoft.YourPhone* | Remove-AppxPackage -AllUsers'
+    }
+
+    # Add bloatware removal commands
     foreach ($bloat in $formData.BloatwareToRemove) {
         if ($bloatwareCommands.ContainsKey($bloat)) {
-            $command = $bloatwareCommands[$bloat]; if ($command.StartsWith("#")) { continue }
+            $command = $bloatwareCommands[$bloat]
+            if ($command.StartsWith("#")) { continue }
+            
             if ($command -match 'Get-AppxPackage|Remove-AppxPackage|Get-WindowsCapability|Remove-WindowsCapability|Disable-WindowsOptionalFeature|Start-Process') {
-                $bytes = [System.Text.Encoding]::Unicode.GetBytes($command); $encodedCommand = [Convert]::ToBase64String($bytes)
-                $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = "powershell.exe -EncodedCommand $encodedCommand"
+                $bytes = [System.Text.Encoding]::Unicode.GetBytes($command)
+                $encodedCommand = [Convert]::ToBase64String($bytes)
+                $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand"))
+                $syncCmd.SetAttribute("Order", $commandIndex++)
+                $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = "powershell.exe -EncodedCommand $encodedCommand"
             } elseif ($command -match 'reg add|reg delete') {
-                 $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand")); $syncCmd.SetAttribute("Order", $commandIndex++); $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = "cmd /c $command"
+                 $syncCmd = $firstLogonCommands.AppendChild($xml.CreateElement("SynchronousCommand"))
+                 $syncCmd.SetAttribute("Order", $commandIndex++)
+                 $syncCmd.AppendChild($xml.CreateElement("CommandLine")).InnerText = "cmd /c $command"
             }
         }
     }
 
+    # Save the XML file
     Write-LogAndHost "Saving file to: $filePath"
     try {
         $xml.Save($filePath)
@@ -3032,5 +3667,3 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
-
-
