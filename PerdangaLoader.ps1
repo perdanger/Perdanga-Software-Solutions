@@ -2,7 +2,7 @@
 .SYNOPSIS
     Author: Roman Zhdanov
     Version: 1.6
-    Last Modified: 01.10.2025
+    Last Modified: 16.11.2025
 .DESCRIPTION
     Perdanga Software Solutions is a PowerShell script designed to simplify the installation, 
     uninstallation, and management of essential Windows software. Includes dynamic application
@@ -1047,6 +1047,220 @@ function Show-SystemInfo {
     }
 
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
+    $null = Read-Host
+}
+
+function Invoke-SystemRepair {
+    <#
+    .SYNOPSIS
+        Runs a full system integrity scan and repair using DISM and SFC.
+    .DESCRIPTION
+        Executes the recommended sequence of DISM /CheckHealth, /ScanHealth, 
+        /RestoreHealth, and finally sfc /scannow. A final summary of all
+        actions is provided at the end.
+    #>
+    
+    $logPrefix = "Invoke-SystemRepair"
+    Write-LogAndHost "Starting System Repair Utility..." -HostColor Cyan -LogPrefix $logPrefix
+
+    # Admin check (good practice, even if main script has it)
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-LogAndHost "This function requires Administrator privileges. Please re-run as Admin." -HostColor Red -LogPrefix $logPrefix
+        Write-LogAndHost "Press any key to return..." -NoLog -HostColor DarkGray; $null = Read-Host
+        return
+    }
+
+    # Confirmation
+    try {
+        Write-LogAndHost "This will run DISM and SFC to scan and repair Windows system files. This process can take a long time and should not be interrupted." -HostColor Yellow
+        Write-LogAndHost "Continue? (Type y/n then press Enter)" -HostColor Yellow -LogPrefix $logPrefix
+        $confirmRepair = Read-Host
+        if ($confirmRepair.Trim().ToLower() -ne 'y') {
+            Write-LogAndHost "System Repair cancelled by user." -HostColor Yellow
+            return
+        }
+    } catch {
+        Write-LogAndHost "Could not read user input. Aborting. $($_.Exception.Message)" -HostColor Red -LogPrefix $logPrefix
+        return
+    }
+
+    Clear-Host
+    Write-LogAndHost "Perdanga System Repair Utility" -HostColor Cyan
+    Write-LogAndHost "----------------------------------" -HostColor Cyan
+    Write-LogAndHost "This process will take several minutes. Do not close this window." -HostColor Yellow
+
+    # Use local variables to track success and results
+    $overallSuccess = $true
+    $repairResults = @()
+
+    # --- Helper function for running commands ---
+    function Run-RepairCommand {
+        <#
+        .SYNOPSIS
+            Runs a command, captures its output, and parses progress.
+        .DESCRIPTION
+            Executes a given command, logs all output, and attempts to parse
+            progress from DISM or SFC commands to display a progress bar.
+        .PARAMETER Title
+            The display name for this step (e.g., "DISM CheckHealth").
+        .PARAMETER Command
+            The executable to run (e.g., "DISM.exe").
+        .PARAMETER Arguments
+            The arguments for the command (e.g., @("/Online", "/CheckHealth")).
+        .PARAMETER LogPrefix
+            The prefix to use for logging.
+        .RETURNS
+            [PSCustomObject] A custom object containing:
+            - .Title   [string] The display name of the step.
+            - .Success [bool]   Whether the step succeeded.
+            - .Result  [string] A human-readable summary of the result.
+        #>
+        param (
+            [string]$Title,
+            [string]$Command,
+            [string[]]$Arguments,
+            [string]$LogPrefix
+        )
+
+        Write-LogAndHost "`n`nStarting: $Title" -HostColor Green
+        
+        # Regex for DISM: "[== 4.9% ]"
+        $dismRegex = '\[=*\s*(\d{1,3}(?:\.\d+)?%)\s*=*\]'
+        # Regex for SFC: "Verification 100% complete."
+        $sfcRegex = 'Verification (\d{1,3})% complete'
+        
+        $lastPercent = ""
+        $resultSummary = ""
+        $isSuccess = $true
+
+        try {
+            # Execute the command and pipe STDOUT and STDERR (2>&1)
+            $output = & $Command $Arguments 2>&1 | ForEach-Object {
+                $line = $_
+                
+                # Log every single line to the log file, but not to the host
+                Write-LogAndHost $line -NoHost -LogPrefix $LogPrefix
+                
+                # Try to find and display progress
+                $percentString = $null
+                
+                if ($line -match $dismRegex) {
+                    $percentString = $matches[1] # e.g., "4.9%"
+                } elseif ($line -match $sfcRegex) {
+                    $percentString = $matches[1] + "%" # e.g., "100%"
+                }
+                
+                if ($percentString -and $percentString -ne $lastPercent) {
+                    $percentNumber = $percentString -replace '%' | ForEach-Object { $_.Trim() }
+                    $barLength = 30
+                    $filledLength = [math]::Round(([double]$percentNumber / 100) * $barLength)
+                    $bar = ('#' * $filledLength) + ('-' * ($barLength - $filledLength))
+                    
+                    Write-Host -NoNewline "`r  [ $bar ] $percentString - $Title" -ForegroundColor Cyan
+                    $lastPercent = $percentString
+                }
+                return $line
+            }
+            $exitCode = $LASTEXITCODE
+            
+            # Clear progress line if one was used
+            if ($lastPercent) {
+                # Overwrite the progress line with spaces
+                Write-Host -NoNewline "`r$(' ' * ($Host.UI.RawUI.WindowSize.Width - 1))"
+                # Go back to the start of the line
+                Write-Host -NoNewline "`r"
+            }
+            Write-LogAndHost "$Title complete." -HostColor Green
+
+            # Analyze final output to determine the summary status
+            $outputString = $output | Out-String
+            
+            if ($exitCode -ne 0) {
+                $resultSummary = "FAILED (Exit Code: $exitCode)"
+                $isSuccess = $false
+            } elseif ($outputString -match "Windows Resource Protection found corrupt files but was unable to fix some of them") {
+                $resultSummary = "FAILED (Could not repair all files)"
+                $isSuccess = $false
+            } elseif ($outputString -match "has been repaired|Windows Resource Protection found corrupt files and successfully repaired them") {
+                $resultSummary = "SUCCESS (Errors found and repaired)"
+            } elseif ($outputString -match "No component store corruption detected|The operation completed successfully|Windows Resource Protection did not find any integrity violations") {
+                $resultSummary = "SUCCESS (No errors found)"
+            } elseif ($exitCode -eq 0) {
+                # If exit code is 0 and no failure strings were found, assume success.
+                # This handles non-English OS languages.
+                $resultSummary = "SUCCESS (No errors reported by exit code)"
+            } else {
+                # Fallback for any other unknown state
+                $resultSummary = "COMPLETED (Unknown status)"
+                $isSuccess = $false # Be pessimistic in the final fallback
+            }
+
+        } catch {
+            $resultSummary = "FAILED (Exception: $($_.Exception.Message))"
+            $isSuccess = $false
+            if ($lastPercent) {
+                Write-Host -NoNewline "`r$(' ' * ($Host.UI.RawUI.WindowSize.Width - 1))"
+                Write-Host -NoNewline "`r"
+            }
+            Write-LogAndHost "An exception occurred while running $Title. Error: $($_.Exception.Message)" -HostColor Red -LogPrefix $LogPrefix
+        }
+        
+        # Return a result object instead of modifying script-scope variables
+        return [PSCustomObject]@{
+            Title = $Title
+            Success = $isSuccess
+            Result = $resultSummary
+        }
+    }
+
+    # --- Run the commands in sequence ---
+    $result = Run-RepairCommand -Title "DISM CheckHealth" -Command "DISM.exe" -Arguments @("/Online", "/Cleanup-Image", "/CheckHealth") -LogPrefix "$logPrefix-CheckHealth"
+    $repairResults += $result
+    if (-not $result.Success) { $overallSuccess = $false }
+    
+    if ($overallSuccess) {
+        $result = Run-RepairCommand -Title "DISM ScanHealth" -Command "DISM.exe" -Arguments @("/Online", "/Cleanup-Image", "/ScanHealth") -LogPrefix "$logPrefix-ScanHealth"
+        $repairResults += $result
+        if (-not $result.Success) { $overallSuccess = $false }
+    }
+    
+    if ($overallSuccess) {
+        $result = Run-RepairCommand -Title "DISM RestoreHealth" -Command "DISM.exe" -Arguments @("/Online", "/Cleanup-Image", "/RestoreHealth") -LogPrefix "$logPrefix-RestoreHealth"
+        $repairResults += $result
+        if (-not $result.Success) { $overallSuccess = $false }
+    }
+
+    if ($overallSuccess) {
+        $result = Run-RepairCommand -Title "SFC scannow" -Command "sfc.exe" -Arguments @("/scannow") -LogPrefix "$logPrefix-SFC"
+        $repairResults += $result
+        if (-not $result.Success) { $overallSuccess = $false }
+    }
+
+    # --- Final Report ---
+    Clear-Host
+    Write-LogAndHost "Perdanga System Repair Report" -HostColor Cyan
+    Write-LogAndHost "----------------------------------" -HostColor Cyan
+
+    foreach ($step in $repairResults) {
+        $color = 'White'
+        if ($step.Result -like "SUCCESS*") { $color = 'Green' }
+        elseif ($step.Result -like "FAILED*") { $color = 'Red' }
+        
+        Write-LogAndHost "$($step.Title):" -NoNewline -HostColor Gray
+        Write-LogAndHost " $($step.Result)" -HostColor $color
+    }
+
+    Write-LogAndHost "`n----------------------------------" -HostColor Cyan
+    if ($overallSuccess) {
+        Write-LogAndHost "Overall Status: System Repair sequence completed successfully." -HostColor Green
+        Write-LogAndHost "A system restart is recommended." -HostColor Yellow
+    } else {
+        Write-LogAndHost "Overall Status: System Repair FAILED. One or more steps encountered errors." -HostColor Red
+        Write-LogAndHost "Please review the report above and check the log file for details:" -HostColor Yellow
+        Write-LogAndHost "$script:logFile" -HostColor Yellow
+    }
+
+    Write-LogAndHost "`nPress any key to return to the menu..." -NoLog -HostColor DarkGray
     $null = Read-Host
 }
 
@@ -3236,14 +3450,15 @@ function Show-Menu {
     $menuLines.Add($centeredOptionsHeader)
     $menuLines.Add($optionsUnderline)
     
-    $optionPairs = @(
-        @{ Left = "[A] Install All Programs";              Right = "[W] Activate Windows" },
-        @{ Left = "[G] Select Specific Programs [GUI]";    Right = "[N] Update Windows" },
-        @{ Left = "[U] Uninstall Programs [GUI]";          Right = "[T] Disable Windows Telemetry" },
-        @{ Left = "[C] Install Custom Program";            Right = "[S] System Cleanup [GUI]" },
-        @{ Left = "[X] Activate Spotify";                  Right = "[F] Create Unattend.xml File [GUI]" },
-        @{ Left = "[P] Import & Install from File";        Right = "[I] Show System Information" }
-    )
+$optionPairs = @(
+    @{ Left = "[A] Install All Programs";              Right = "[W] Activate Windows" },
+    @{ Left = "[G] Select Specific Programs [GUI]";    Right = "[N] Update Windows" },
+    @{ Left = "[U] Uninstall Programs [GUI]";          Right = "[T] Disable Windows Telemetry" },
+    @{ Left = "[C] Install Custom Program";            Right = "[S] System Cleanup [GUI]" },
+    @{ Left = "[X] Activate Spotify";                  Right = "[F] Create Unattend.xml File [GUI]" },
+    @{ Left = "[P] Import & Install from File";        Right = "[I] Show System Information" },
+    @{ Left = "";                                      Right = "[R] System Repair" } 
+)
 
     $column1Width = ($optionPairs.Left | Measure-Object -Property Length -Maximum).Maximum + 5
 
@@ -3359,7 +3574,8 @@ $programs = @(
 
 # --- SCRIPT-WIDE VARIABLES ---
 $script:sortedPrograms = $programs | Sort-Object
-$script:mainMenuLetters = @('a', 'c', 'e', 'f', 'g', 'i', 'n', 'p', 's', 't', 'u', 'w', 'x')
+# In PART 3: CONFIGURATION
+$script:mainMenuLetters = @('a', 'c', 'e', 'f', 'g', 'i', 'n', 'p', 'r', 's', 't', 'u', 'w', 'x') 
 $script:mainMenuRegexPattern = "^(perdanga|" + ($script:mainMenuLetters -join '|') + "|[0-9,\s]+)$"
 $script:availableProgramNumbers = 1..($script:sortedPrograms.Count) | ForEach-Object { $_.ToString() }
 $script:programToNumberMap = @{}
@@ -3609,6 +3825,7 @@ do {
             's' { Clear-Host; Invoke-TempFileCleanup }
             'i' { Clear-Host; Show-SystemInfo }
             'p' { Clear-Host; Import-ProgramSelection }
+            'r' { Clear-Host; Invoke-SystemRepair }
         }
     }
     elseif ($userInput -match '[, ]+') {
