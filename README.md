@@ -44,7 +44,7 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 - **[S] System Cleanup [GUI]**
 - **[P] Import & Install from File**
 - **[I] Show System Information [GUI]**
-- **[I] System Repair**
+- **[R] System Repair**
 
 > [!TIP]  
 > To install specific programs, enter their numbers (e.g., `1 5 17`, or `1,5,17`) from the supported programs list.  
