@@ -52,6 +52,8 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 ### 2. Perdanga System Manager [P]
 
+Features
+
 - **System Tweaks**: Apply or undo tweaks in categories like Privacy, System, Network, Appearance, Explorer, Input, and Advanced Debloat.
 - **Install Apps**: Batch install, update, or uninstall software using Winget or Chocolatey.
 - **Maintenance**: Run various repair and cleanup tasks:
