@@ -57,7 +57,7 @@ Efficient Windows Management for Software, Tweaks, Power, Updates.
 - **System Tweaks**:
   - Apply or undo tweaks in categories like Privacy, System, Network, Appearance, Explorer, Input, and Advanced Debloat.
 
-![SystemTweaks](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/System%20Tweaks.png?raw=true)
+![SystemTweaks](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/SystemTweaks.png?raw=true)
 
 - **Install Apps**:
   - Batch install, update, or uninstall software using Winget or Chocolatey.
