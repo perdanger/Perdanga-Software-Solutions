@@ -57,25 +57,25 @@ installing/uninstalling software, configuring Windows Update policies, and acces
 
 - **System Tweaks**: Apply or undo tweaks in categories like Privacy, System, Network, Appearance, Explorer, Input, and Advanced Debloat.
 - **Install Apps**: Batch install, update, or uninstall software using Winget or Chocolatey.
-- **Maintenance: Run various repair and cleanup tasks:**
+- **Maintenance:** Run various repair and cleanup tasks:
   - Set DNS (Google, Cloudflare, or reset to DHCP).
   - Reset Windows Update components.
   - System Scan (CHKDSK, SFC, DISM).
-  Deep Cleanup (Disk Cleanup + Component Store).
-  Network Reset (Flush DNS, reset IP/Winsock).
-  Reinstall Package Manager (Winget/Chocolatey).
-  Remove OneDrive.
-  Run external tools: O&O ShutUp10, Sysinternals Autoruns, Adobe CC Cleaner.
-  Enable SSH Server.
+  - Deep Cleanup (Disk Cleanup + Component Store).
+  - Network Reset (Flush DNS, reset IP/Winsock).
+  - Reinstall Package Manager (Winget/Chocolatey).
+  - Remove OneDrive.
+  - Run external tools: O&O ShutUp10, Sysinternals Autoruns, Adobe CC Cleaner.
+  - Enable SSH Server.
 - **Windows Update Config**: Manage update policies:
-  Default (Enabled).
-  Security Only (Defer features for 1 year).
-  Disabled.
+  - Default (Enabled).
+  - Security Only (Defer features for 1 year).
+  - Disabled.
 - **Quick Tools**: 
-  Control Panel, Network Connections, Power Options.
-  Sound Settings, System Properties, User Accounts.
-  Registry Editor, Services, God Mode.
-  Task Manager, Restart Explorer.
+  - Control Panel, Network Connections, Power Options.
+  - Sound Settings, System Properties, User Accounts.
+  - Registry Editor, Services, God Mode.
+  - Task Manager, Restart Explorer.
 
 ### 3. Unattend.xml Creator [F]
 
