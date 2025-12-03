@@ -36,7 +36,6 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 - **[G] Select Specific Programs [GUI]**
 - **[U] Uninstall Programs [GUI]**
 - **[C] Install Custom Package**
-- **[T] Disable Windows Telemetry**
 - **[X] Activate Spotify**
 - **[W] Activate Windows**
 - **[N] Update Windows**
@@ -44,13 +43,38 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 - **[S] System Cleanup [GUI]**
 - **[P] Import & Install from File**
 - **[I] Show System Information [GUI]**
+- **[P] Perdanga System Manager [GUI]**
 - **[R] System Repair**
 
 > [!TIP]  
 > To install specific programs, enter their numbers (e.g., `1 5 17`, or `1,5,17`) from the supported programs list.  
 > Type `perdanga` for a hidden cheese! 🧀
 
-### 2. Unattend.xml Creator [F]
+### 2. Perdanga System Manager [P]
+
+- **System Tweaks**: Apply or undo tweaks in categories like Privacy, System, Network, Appearance, Explorer, Input, and Advanced Debloat.
+- **Install Apps**: Batch install, update, or uninstall software using Winget or Chocolatey.
+- **Maintenance**: Run various repair and cleanup tasks:
+- Set DNS (Google, Cloudflare, or reset to DHCP).
+- Reset Windows Update components.
+- System Scan (CHKDSK, SFC, DISM).
+- Deep Cleanup (Disk Cleanup + Component Store).
+- Network Reset (Flush DNS, reset IP/Winsock).
+- Reinstall Package Manager (Winget/Chocolatey).
+- Remove OneDrive.
+- Run external tools: O&O ShutUp10, Sysinternals Autoruns, Adobe CC Cleaner.
+- Enable SSH Server.
+- **Windows Update Config**:Manage update policies:
+- Default (Enabled).
+- Security Only (Defer features for 1 year).
+- Disabled.
+- **Quick Tools**: 
+- Control Panel, Network Connections, Power Options.
+- Sound Settings, System Properties, User Accounts.
+- Registry Editor, Services, God Mode.
+- Task Manager, Restart Explorer.
+
+### 3. Unattend.xml Creator [F]
 
 Customize your Windows installation with these options:
 
@@ -66,7 +90,7 @@ Customize your Windows installation with these options:
 
 ![Unattend.xml Creator](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/UnattendxmlFile.png?raw=true)
 
-### 3. System Cleanup [S]
+### 4. System Cleanup [S]
 
 Enhanced system cleanup with dynamic application cache detection:
 
@@ -77,7 +101,7 @@ Enhanced system cleanup with dynamic application cache detection:
 
 ![System Cleanup](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/SystemCleanup.png?raw=true)
 
-### 4. System Information [I]
+### 5. System Information [I]
 
 - **Operating System**
 - **Processor**
