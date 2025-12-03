@@ -4441,7 +4441,7 @@ $optionPairs = @(
     @{ Left = "[U] Uninstall Programs [GUI]";          Right = "[S] System Cleanup [GUI]" },
     @{ Left = "[C] Install Custom Program";            Right = "[F] Create Unattend.xml File [GUI]" },
     @{ Left = "[X] Activate Spotify";                  Right = "[I] Show System Information" },
-    @{ Left = "[P] Import & Install from File";        Right = "[P] Perdanga System Manager" }                                     
+    @{ Left = "[L] Import & Install from File";        Right = "[P] Perdanga System Manager" }                                     
 )
 
     $column1Width = ($optionPairs.Left | Measure-Object -Property Length -Maximum).Maximum + 5
@@ -4869,3 +4869,4 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
