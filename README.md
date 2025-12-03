@@ -54,10 +54,11 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 Efficient Windows Management for Software, Tweaks, Power, Updates.
 
-![System Tweaks](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/System%20Tweaks.png?raw=true)
-
 - **System Tweaks**:
   - Apply or undo tweaks in categories like Privacy, System, Network, Appearance, Explorer, Input, and Advanced Debloat.
+
+![System Tweaks](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/System%20Tweaks.png?raw=true)
+
 - **Install Apps**:
   - Batch install, update, or uninstall software using Winget or Chocolatey.
 - **Maintenance:**
