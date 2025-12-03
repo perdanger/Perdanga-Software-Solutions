@@ -58,9 +58,9 @@ installing/uninstalling software, configuring Windows Update policies, and acces
 - **System Tweaks**: Apply or undo tweaks in categories like Privacy, System, Network, Appearance, Explorer, Input, and Advanced Debloat.
 - **Install Apps**: Batch install, update, or uninstall software using Winget or Chocolatey.
 - **Maintenance: Run various repair and cleanup tasks:**
-> Set DNS (Google, Cloudflare, or reset to DHCP).
-  Reset Windows Update components.
-  System Scan (CHKDSK, SFC, DISM).
+  - Set DNS (Google, Cloudflare, or reset to DHCP).
+  - Reset Windows Update components.
+  - System Scan (CHKDSK, SFC, DISM).
   Deep Cleanup (Disk Cleanup + Component Store).
   Network Reset (Flush DNS, reset IP/Winsock).
   Reinstall Package Manager (Winget/Chocolatey).
