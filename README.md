@@ -55,11 +55,10 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 Efficient Windows Management for Software, Tweaks, Power, Updates.
 
 - **System Tweaks**:
- - Apply or undo tweaks in categories like Privacy, System, Network, Appearance, Explorer, Input, and Advanced Debloat.
+  - Apply or undo tweaks in categories like Privacy, System, Network, Appearance, Explorer, Input, and Advanced Debloat.
 - **Install Apps**:
- - Batch install, update, or uninstall software using Winget or Chocolatey.
+  - Batch install, update, or uninstall software using Winget or Chocolatey.
 - **Maintenance:**
- - Run various repair and cleanup tasks:
   - Set DNS (Google, Cloudflare, or reset to DHCP).
   - Reset Windows Update components.
   - System Scan (CHKDSK, SFC, DISM).
