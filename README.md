@@ -52,8 +52,7 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
 ### 2. Perdanga System Manager [P]
 
-GUI tool designed to simplify system management on Windows. It provides an intuitive interface for managing power plans, applying system tweaks, performing maintenance tasks, 
-installing/uninstalling software, configuring Windows Update policies, and accessing quick system tools.
+Efficient Windows Management for Software, Tweaks, Power, Updates.
 
 - **System Tweaks**: Apply or undo tweaks in categories like Privacy, System, Network, Appearance, Explorer, Input, and Advanced Debloat.
 - **Install Apps**: Batch install, update, or uninstall software using Winget or Chocolatey.
