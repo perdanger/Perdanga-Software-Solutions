@@ -1,172 +1,131 @@
-Perdanga Software Solutions
 
-Perdanga Software Solutions is a PowerShell script designed to simplify the installation, uninstallation, and management of essential Windows software, with enhanced system cleanup and information features.
 
-Quick Start
+# Perdanga Software Solutions
 
-Run in PowerShell:
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/perdanger/Perdanga-Software-Solutions?color=blue) ![License](https://img.shields.io/github/license/perdanger/Perdanga-Software-Solutions?color=green) ![Chocolatey](https://img.shields.io/badge/Powered%20by-Chocolatey-brown) ![PowerShell](https://img.shields.io/badge/Powered%20by-PowerShell-blue) ![Open Source](https://img.shields.io/badge/Open%20Source-PerdangaForever-brightgreen) ![GitHub Stars](https://img.shields.io/github/stars/perdanger/Perdanga-Software-Solutions?style=social)
 
-irm [https://bit.ly/PerdangaSoftwareSolutions](https://bit.ly/PerdangaSoftwareSolutions) | iex
+![Perdanga Forever](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/PSS1.5.png?raw=true)
 
+> Perdanga Software Solutions is a PowerShell script designed to simplify the **installation**, **uninstallation**, and **management** of essential Windows software, with enhanced system cleanup and information features.
 
-Direct Download the Latest Version (v1.7)
+## Quick Start
 
-$$\!IMPORTANT$$
+1. **Run in PowerShell**:
 
-Ensure the script is run with Administrator privileges to avoid execution issues.
+   ```powershell
+   irm https://bit.ly/PerdangaSoftwareSolutions | iex
+   ```
 
-What's New in v1.7
+2. **[Direct Download the Latest Version](https://github.com/perdanger/Perdanga-Software-Solutions/releases/download/1.6/PSS.1.6.rar)**
 
-Enhanced Feature: GUI System Manager! The [G] option now launches the powerful graphical user interface (Invoke-PerdangaSystemManager v5.6) for comprehensive management of power plans, system tweaks, maintenance, software, and Windows Update settings.
+> [!IMPORTANT]  
+> Ensure is run with **Administrator privileges** to avoid execution issues.
 
-New Supported Programs: Added qbittorrent, microsoft-edge, and crystaldiskinfo to the main installation menu.
+## Supported Programs
 
-Menu Update: The Windows Activation option is now labeled [A] Activate Windows (MAS) for better clarity.
+7zip.install, brave, cursoride, discord, file-converter,  
+git, googlechrome, imageglass, nilesoft-shell, nvidia-app,  
+obs-studio, occt, qbittorrent, revo-uninstaller, spotify,  
+steam, telegram, vcredist-all, vlc, winrar, wiztree.
 
-Supported Programs
+## 💥 Features
 
-7zip.install, brave, cursoride, discord, file-explorer-tabs, firefox, git, googlechrome, notepadplusplus, obs-studio, open-shell, powertoys, qbit, steam, vscode, vlc, qbittorrent, microsoft-edge, crystaldiskinfo
+### 1. Main Menu
 
-Main Menu Options
+- **[A] Install All Programs**
+- **[G] Select Specific Programs [GUI]**
+- **[U] Uninstall Programs [GUI]**
+- **[C] Install Custom Package**
+- **[T] Disable Windows Telemetry**
+- **[X] Activate Spotify**
+- **[W] Activate Windows**
+- **[N] Update Windows**
+- **[F] Create Unattend.xml File [GUI]**
+- **[S] System Cleanup [GUI]**
+- **[P] Import & Install from File**
+- **[I] Show System Information [GUI]**
+- **[R] System Repair**
 
-Option
+> [!TIP]  
+> To install specific programs, enter their numbers (e.g., `1 5 17`, or `1,5,17`) from the supported programs list.  
+> Type `perdanga` for a hidden cheese! 🧀
 
-Description
+### 2. Unattend.xml Creator [F]
 
+Customize your Windows installation with these options:
 
+- **System Settings**: Set computer name, admin user, and password.
+- **Regional Preferences**: Configure UI language, system locale, user locale, time zone, and keyboard layouts.
+- **OOBE Bypass**: Skip EULA, local/online account setup, and wireless configuration.
+- **System Tweaks**: Enable file extensions, disable SmartScreen, enable system restore, or disable app suggestions.
+- **Bloatware Removal**: Remove unwanted pre-installed apps during setup.
+- **Output**: Saves the `autounattend.xml` file to your Desktop for use with a Windows installation USB.
 
-$$A$$
+> [!NOTE]  
+> Learn more about answer files (Unattend.xml) [Microsoft Documentation](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/update-windows-settings-and-scripts-create-your-own-answer-file-sxs?view=windows-11).
 
+![Unattend.xml Creator](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/UnattendxmlFile.png?raw=true)
 
+### 3. System Cleanup [S]
 
-Activate Windows (MAS) - NEW Label
+Enhanced system cleanup with dynamic application cache detection:
 
+- **Windows Temporary Files**
+- **Application Caches**
+- **Browser Caches**
+- **System Caches**
 
+![System Cleanup](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/SystemCleanup.png?raw=true)
 
-$$C$$
+### 4. System Information [I]
 
+- **Operating System**
+- **Processor**
+- **System Hardware**
+- **Memory (RAM)**
+- **Video Card(s)**
+- **Disk Drives**
+- **Network Adapters**
 
+![System Information](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/SystemInfo.png?raw=true)
 
-Install program from Chocolatey ID
+### 5. Import & Install from File [P]
 
+Imports a JSON file containing a list of program names to install:
 
+- Select a `.json` file from your Desktop.
+- Validates and installs the listed programs.
+- Example JSON format: `["7zip.install", "brave", "vlc"]`.
 
-$$G$$
+## 🛠️ Troubleshooting
 
+- **Script Fails to Run**:
+  - Ensure PowerShell is run with **Administrator privileges**.
+  - Verify PowerShell version (5.1 or higher): `Get-Host | Select-Object Version` or `$PSVersionTable.PSVersion`.
+  - Check your execution policy: `Get-ExecutionPolicy`. If restricted, set it to `RemoteSigned` with `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`.
 
+- **GUI Unavailable**:
+  - If `[G]`, `[U]`, `[F]`, `[S]`, or `[I]` options fail, ensure `System.Windows.Forms` is available. Alternatively, use CLI-based options.
 
-Launch GUI System Manager (BETA) - ENHANCED
+- **Package Not Found**:
+  - For `[C]`, confirm the package ID exists in the Chocolatey repository: `choco search <id>`.
 
+- **Logs**:
+  - Review `install_log_YYYYMMDD_HHMMSS.txt` in the script directory or `%TEMP%` folder for detailed error information.
 
-
-$$R$$
-
-
-
-Remove program (Select from list of all installed programs)
-
-
-
-$$U$$
-
-
-
-Uninstall (Select from official Windows installed applications list)
-
-
-
-$$F$$
-
-
-
-Flush DNS & Reset Net/Firewall settings
-
-
-
-$$S$$
-
-
-
-SpotX (Spotify Ad-Blocker/Features)
-
-
-
-$$I$$
-
-
-
-System Information
-
-
-
-$$L$$
-
-
-
-Launch Logs
-
-
-
-$$Q$$
-
-
-
-Quit
-
-📦 Batch Install (CLI)
-
-Use the -BatchInstall parameter to install multiple programs without using the main menu.
-
-# Example: Installs 7zip and Brave
-.\[scriptname].ps1 -BatchInstall '7zip.install', 'brave'
-
-
-📜 Programs from JSON
-
-The script can read a list of desired packages from a JSON file named packages.json placed in the same directory as the script file from your Desktop.
-
-Validates and installs the listed programs.
-
-Example JSON format: ["7zip.install", "brave", "vlc"].
-
-🛠️ Troubleshooting
-
-Script Fails to Run:
-
-Ensure PowerShell is run with Administrator privileges.
-
-Verify PowerShell version (5.1 or higher): Get-Host | Select-Object Version or $PSVersionTable.PSVersion.
-
-Check your execution policy: Get-ExecutionPolicy. If restricted, set it to RemoteSigned with Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned.
-
-GUI Unavailable:
-
-If the [G] option fails, ensure System.Windows.Forms is available. Alternatively, use CLI-based options.
-
-Package Not Found:
-
-For [C], confirm the package ID exists in the Chocolatey repository: choco search <id>.
-
-Logs:
-
-Review install_log_YYYYMMDD_HHMMSS.txt in the script directory or %TEMP% folder for detailed error information.
-
-📜 Credits
+## 📜 Credits
 
 This project incorporates code from the following third-party sources:
 
-SpotX (Spotify activation feature)
+- **SpotX** (Spotify activation feature)
+  - Repository: SpotX-Official
+  - Copyright © 2025 SpotX-Official
+  - License: MIT License
 
-Repository: SpotX-Official
+- **Microsoft Activation Scripts** (Windows activation feature)
+  - Repository: massgravel/Microsoft-Activation-Scripts
+  - Copyright © 2025 massgravel
+  - License: GPL-3.0
 
-Copyright © 2025 SpotX-Official
-
-License: MIT License
-
-Microsoft Activation Scripts (Windows activation feature)
-
-Repository: massgravel/Microsoft-Activation-Scripts
-
-Copyright © 2025 massgravel
-
-License: GPL-3.0
+![Logo](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/PerdangaForeverLogo.png?raw=true)
+<p align="center"><b>⚡PERDANGA FOREVER⚡</b></p>
