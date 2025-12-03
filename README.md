@@ -61,6 +61,9 @@ Efficient Windows Management for Software, Tweaks, Power, Updates.
 
 - **Install Apps**:
   - Batch install, update, or uninstall software using Winget or Chocolatey.
+
+![Install Apss](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/IntallApps.png?raw=true)
+
 - **Maintenance:**
   - Set DNS (Google, Cloudflare, or reset to DHCP).
   - Reset Windows Update components.
