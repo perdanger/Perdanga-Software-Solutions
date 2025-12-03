@@ -41,7 +41,7 @@ steam, telegram, vcredist-all, vlc, winrar, wiztree.
 - **[N] Update Windows**
 - **[F] Create Unattend.xml File [GUI]**
 - **[S] System Cleanup [GUI]**
-- **[P] Import & Install from File**
+- **[L] Import & Install from File**
 - **[I] Show System Information [GUI]**
 - **[P] Perdanga System Manager [GUI]**
 - **[R] System Repair**
@@ -117,7 +117,7 @@ Enhanced system cleanup with dynamic application cache detection:
 
 ![System Information](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/SystemInfo.png?raw=true)
 
-### 5. Import & Install from File [P]
+### 5. Import & Install from File [L]
 
 Imports a JSON file containing a list of program names to install:
 
