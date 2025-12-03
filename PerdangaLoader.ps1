@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
     Author: Roman Zhdanov
-    Version: 1.6
-    Last Modified: 16.11.2025
+    Version: 1.7
+    Last Modified: 03.12.2025
 .DESCRIPTION
     Perdanga Software Solutions is a PowerShell script designed to simplify the installation, 
     uninstallation, and management of essential Windows software. Includes dynamic application
@@ -1050,219 +1050,7 @@ function Show-SystemInfo {
     $null = Read-Host
 }
 
-function Invoke-SystemRepair {
-    <#
-    .SYNOPSIS
-        Runs a full system integrity scan and repair using DISM and SFC.
-    .DESCRIPTION
-        Executes the recommended sequence of DISM /CheckHealth, /ScanHealth, 
-        /RestoreHealth, and finally sfc /scannow. A final summary of all
-        actions is provided at the end.
-    #>
-    
-    $logPrefix = "Invoke-SystemRepair"
-    Write-LogAndHost "Starting System Repair Utility..." -HostColor Cyan -LogPrefix $logPrefix
 
-    # Admin check (good practice, even if main script has it)
-    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        Write-LogAndHost "This function requires Administrator privileges. Please re-run as Admin." -HostColor Red -LogPrefix $logPrefix
-        Write-LogAndHost "Press any key to return..." -NoLog -HostColor DarkGray; $null = Read-Host
-        return
-    }
-
-    # Confirmation
-    try {
-        Write-LogAndHost "This will run DISM and SFC to scan and repair Windows system files. This process can take a long time and should not be interrupted." -HostColor Yellow
-        Write-LogAndHost "Continue? (Type y/n then press Enter)" -HostColor Yellow -LogPrefix $logPrefix
-        $confirmRepair = Read-Host
-        if ($confirmRepair.Trim().ToLower() -ne 'y') {
-            Write-LogAndHost "System Repair cancelled by user." -HostColor Yellow
-            return
-        }
-    } catch {
-        Write-LogAndHost "Could not read user input. Aborting. $($_.Exception.Message)" -HostColor Red -LogPrefix $logPrefix
-        return
-    }
-
-    Clear-Host
-    Write-LogAndHost "Perdanga System Repair Utility" -HostColor Cyan
-    Write-LogAndHost "----------------------------------" -HostColor Cyan
-    Write-LogAndHost "This process will take several minutes. Do not close this window." -HostColor Yellow
-
-    # Use local variables to track success and results
-    $overallSuccess = $true
-    $repairResults = @()
-
-    # --- Helper function for running commands ---
-    function Run-RepairCommand {
-        <#
-        .SYNOPSIS
-            Runs a command, captures its output, and parses progress.
-        .DESCRIPTION
-            Executes a given command, logs all output, and attempts to parse
-            progress from DISM or SFC commands to display a progress bar.
-        .PARAMETER Title
-            The display name for this step (e.g., "DISM CheckHealth").
-        .PARAMETER Command
-            The executable to run (e.g., "DISM.exe").
-        .PARAMETER Arguments
-            The arguments for the command (e.g., @("/Online", "/CheckHealth")).
-        .PARAMETER LogPrefix
-            The prefix to use for logging.
-        .RETURNS
-            [PSCustomObject] A custom object containing:
-            - .Title   [string] The display name of the step.
-            - .Success [bool]   Whether the step succeeded.
-            - .Result  [string] A human-readable summary of the result.
-        #>
-        param (
-            [string]$Title,
-            [string]$Command,
-            [string[]]$Arguments,
-            [string]$LogPrefix
-        )
-
-        Write-LogAndHost "`n`nStarting: $Title" -HostColor Green
-        
-        # Regex for DISM: "[== 4.9% ]"
-        $dismRegex = '\[=*\s*(\d{1,3}(?:\.\d+)?%)\s*=*\]'
-        # Regex for SFC: "Verification 100% complete."
-        $sfcRegex = 'Verification (\d{1,3})% complete'
-        
-        $lastPercent = ""
-        $resultSummary = ""
-        $isSuccess = $true
-
-        try {
-            # Execute the command and pipe STDOUT and STDERR (2>&1)
-            $output = & $Command $Arguments 2>&1 | ForEach-Object {
-                $line = $_
-                
-                # Log every single line to the log file, but not to the host
-                Write-LogAndHost $line -NoHost -LogPrefix $LogPrefix
-                
-                # Try to find and display progress
-                $percentString = $null
-                
-                if ($line -match $dismRegex) {
-                    $percentString = $matches[1] # e.g., "4.9%"
-                } elseif ($line -match $sfcRegex) {
-                    $percentString = $matches[1] + "%" # e.g., "100%"
-                }
-                
-                if ($percentString -and $percentString -ne $lastPercent) {
-                    $percentNumber = $percentString -replace '%' | ForEach-Object { $_.Trim() }
-                    $barLength = 30
-                    $filledLength = [math]::Round(([double]$percentNumber / 100) * $barLength)
-                    $bar = ('#' * $filledLength) + ('-' * ($barLength - $filledLength))
-                    
-                    Write-Host -NoNewline "`r  [ $bar ] $percentString - $Title" -ForegroundColor Cyan
-                    $lastPercent = $percentString
-                }
-                return $line
-            }
-            $exitCode = $LASTEXITCODE
-            
-            # Clear progress line if one was used
-            if ($lastPercent) {
-                # Overwrite the progress line with spaces
-                Write-Host -NoNewline "`r$(' ' * ($Host.UI.RawUI.WindowSize.Width - 1))"
-                # Go back to the start of the line
-                Write-Host -NoNewline "`r"
-            }
-            Write-LogAndHost "$Title complete." -HostColor Green
-
-            # Analyze final output to determine the summary status
-            $outputString = $output | Out-String
-            
-            if ($exitCode -ne 0) {
-                $resultSummary = "FAILED (Exit Code: $exitCode)"
-                $isSuccess = $false
-            } elseif ($outputString -match "Windows Resource Protection found corrupt files but was unable to fix some of them") {
-                $resultSummary = "FAILED (Could not repair all files)"
-                $isSuccess = $false
-            } elseif ($outputString -match "has been repaired|Windows Resource Protection found corrupt files and successfully repaired them") {
-                $resultSummary = "SUCCESS (Errors found and repaired)"
-            } elseif ($outputString -match "No component store corruption detected|The operation completed successfully|Windows Resource Protection did not find any integrity violations") {
-                $resultSummary = "SUCCESS (No errors found)"
-            } elseif ($exitCode -eq 0) {
-                # If exit code is 0 and no failure strings were found, assume success.
-                # This handles non-English OS languages.
-                $resultSummary = "SUCCESS (No errors reported by exit code)"
-            } else {
-                # Fallback for any other unknown state
-                $resultSummary = "COMPLETED (Unknown status)"
-                $isSuccess = $false # Be pessimistic in the final fallback
-            }
-
-        } catch {
-            $resultSummary = "FAILED (Exception: $($_.Exception.Message))"
-            $isSuccess = $false
-            if ($lastPercent) {
-                Write-Host -NoNewline "`r$(' ' * ($Host.UI.RawUI.WindowSize.Width - 1))"
-                Write-Host -NoNewline "`r"
-            }
-            Write-LogAndHost "An exception occurred while running $Title. Error: $($_.Exception.Message)" -HostColor Red -LogPrefix $LogPrefix
-        }
-        
-        # Return a result object instead of modifying script-scope variables
-        return [PSCustomObject]@{
-            Title = $Title
-            Success = $isSuccess
-            Result = $resultSummary
-        }
-    }
-
-    # --- Run the commands in sequence ---
-    $result = Run-RepairCommand -Title "DISM CheckHealth" -Command "DISM.exe" -Arguments @("/Online", "/Cleanup-Image", "/CheckHealth") -LogPrefix "$logPrefix-CheckHealth"
-    $repairResults += $result
-    if (-not $result.Success) { $overallSuccess = $false }
-    
-    if ($overallSuccess) {
-        $result = Run-RepairCommand -Title "DISM ScanHealth" -Command "DISM.exe" -Arguments @("/Online", "/Cleanup-Image", "/ScanHealth") -LogPrefix "$logPrefix-ScanHealth"
-        $repairResults += $result
-        if (-not $result.Success) { $overallSuccess = $false }
-    }
-    
-    if ($overallSuccess) {
-        $result = Run-RepairCommand -Title "DISM RestoreHealth" -Command "DISM.exe" -Arguments @("/Online", "/Cleanup-Image", "/RestoreHealth") -LogPrefix "$logPrefix-RestoreHealth"
-        $repairResults += $result
-        if (-not $result.Success) { $overallSuccess = $false }
-    }
-
-    if ($overallSuccess) {
-        $result = Run-RepairCommand -Title "SFC scannow" -Command "sfc.exe" -Arguments @("/scannow") -LogPrefix "$logPrefix-SFC"
-        $repairResults += $result
-        if (-not $result.Success) { $overallSuccess = $false }
-    }
-
-    # --- Final Report ---
-    Clear-Host
-    Write-LogAndHost "Perdanga System Repair Report" -HostColor Cyan
-    Write-LogAndHost "----------------------------------" -HostColor Cyan
-
-    foreach ($step in $repairResults) {
-        $color = 'White'
-        if ($step.Result -like "SUCCESS*") { $color = 'Green' }
-        elseif ($step.Result -like "FAILED*") { $color = 'Red' }
-        
-        Write-LogAndHost "$($step.Title):" -NoNewline -HostColor Gray
-        Write-LogAndHost " $($step.Result)" -HostColor $color
-    }
-
-    Write-LogAndHost "`n----------------------------------" -HostColor Cyan
-    if ($overallSuccess) {
-        Write-LogAndHost "Overall Status: System Repair sequence completed successfully." -HostColor Green
-        Write-LogAndHost "A system restart is recommended." -HostColor Yellow
-    } else {
-        Write-LogAndHost "Overall Status: System Repair FAILED. One or more steps encountered errors." -HostColor Red
-        Write-LogAndHost "Please review the report above and check the log file for details:" -HostColor Yellow
-        Write-LogAndHost "$script:logFile" -HostColor Yellow
-    }
-
-    Write-LogAndHost "`nPress any key to return to the menu..." -NoLog -HostColor DarkGray
-    $null = Read-Host
-}
 
 #  FUNCTION : Imports a list of programs from a file and installs them.
 function Import-ProgramSelection {
@@ -2101,6 +1889,1203 @@ function Invoke-TempFileCleanup {
     
     Write-LogAndHost "Press any key to return to the menu..." -NoLog -HostColor DarkGray
     $null = Read-Host
+}
+
+function Invoke-PerdangaSystemManager {
+    <#
+    .SYNOPSIS
+        A comprehensive GUI-based manager for Power Plans, System Tweaks, Maintenance, Software, and Windows Update.
+    .DESCRIPTION
+        VERSION 5.6:
+        - NEW: Added "Refresh List" button to Install Apps tab.
+        - NEW: Added "Update Selected" button to Install Apps tab.
+        - FIX: Chocolatey detection logic improved (Path/Output parsing).
+        - UPDATE: Installed software highlighting (Green/Gray status).
+    #>
+    
+    # --- 1. PREREQUISITES CHECK ---
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Host "[ERROR] Script requires Administrator privileges." -ForegroundColor Red
+        [System.Windows.Forms.MessageBox]::Show("This tool requires Administrator privileges.`nPlease re-run PowerShell as an Administrator.", "Privilege Error", "OK", "Error") | Out-Null
+        return
+    }
+
+    # Load Assemblies
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
+    Write-Host "[INIT] Starting Perdanga System Manager" -ForegroundColor Cyan
+
+    # --- 2. SHARED STATE (SYNCHRONIZED) ---
+    $sync = [Hashtable]::Synchronized(@{})
+    $sync.Form = $null
+    $sync.PowerPlans = @()
+    $sync.InstalledApps = @()
+    $sync.AppliedTweaks = @()
+    $sync.StatusMessage = "Ready"
+    $sync.IsBusy = $false
+    $sync.PackageManager = "winget" 
+    $sync.SoftwareSearchText = ""
+    $sync.WUStatus = "Checking..."
+    $sync.MenuButtons = @{}
+    $sync.ActionQueue = @() 
+    
+    # --- 3. DATABASE DEFINITIONS ---
+    $sync.Tweaks = @(
+        # --- ESSENTIAL / PRIVACY ---
+        @{ 
+            Id="WPFTweaksTele"; Name="Disable Telemetry"; Category="Privacy"; Description="Disables DiagTrack, WAP Push, and extensive data collection."; 
+            ScheduledTask=@(
+                @{ Name="Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Application Experience\ProgramDataUpdater"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Autochk\Proxy"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Customer Experience Improvement Program\Consolidator"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Customer Experience Improvement Program\UsbCeip"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Feedback\Siuf\DmClient"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Windows Error Reporting\QueueReporting"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Application Experience\MareBackup"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Application Experience\StartupAppTask"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Application Experience\PcaPatchDbTask"; State="Disabled"; OriginalState="Enabled" },
+                @{ Name="Microsoft\Windows\Maps\MapsUpdateTask"; State="Disabled"; OriginalState="Enabled" }
+            );
+            Registry=@(
+                @{ Path="HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection"; Name="AllowTelemetry"; Value="0"; OriginalValue="<RemoveEntry>"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"; Name="AllowTelemetry"; Value="0"; OriginalValue="<RemoveEntry>"; Type="DWord" },
+                @{ Path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="ContentDeliveryAllowed"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="OemPreInstalledAppsEnabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="PreInstalledAppsEnabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="PreInstalledAppsEverEnabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="SilentInstalledAppsEnabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="SubscribedContent-338387Enabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="SubscribedContent-338388Enabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="SubscribedContent-338389Enabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="SubscribedContent-353698Enabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name="SystemPaneSuggestionsEnabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"; Name="DoNotShowFeedbackNotifications"; Value="1"; OriginalValue="<RemoveEntry>"; Type="DWord" },
+                @{ Path="HKCU:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"; Name="DisableTailoredExperiencesWithDiagnosticData"; Value="1"; OriginalValue="<RemoveEntry>"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo"; Name="DisabledByGroupPolicy"; Value="1"; OriginalValue="<RemoveEntry>"; Type="DWord" }
+            )
+        },
+        @{ 
+            Id="WPFTweaksConsumerFeatures"; Name="Disable Consumer Features"; Category="Privacy"; Description="Stops Windows from auto-installing sponsored apps."; 
+            Registry=@( @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"; Name="DisableWindowsConsumerFeatures"; Value="1"; OriginalValue="<RemoveEntry>"; Type="DWord" } )
+        },
+        @{ 
+            Id="WPFTweaksActivity"; Name="Disable Activity History"; Category="Privacy"; Description="Stops Windows from tracking launched apps and docs."; 
+            Registry=@( 
+                @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"; Name="EnableActivityFeed"; Value="0"; OriginalValue="<RemoveEntry>"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"; Name="PublishUserActivities"; Value="0"; OriginalValue="<RemoveEntry>"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"; Name="UploadUserActivities"; Value="0"; OriginalValue="<RemoveEntry>"; Type="DWord" }
+            ) 
+        },
+        @{ 
+            Id="WPFTweaksLoc"; Name="Disable Location Tracking"; Category="Privacy"; Description="Disables system-wide location tracking services."; 
+            Registry=@( 
+                @{ Path="HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location"; Name="Value"; Value="Deny"; OriginalValue="Allow"; Type="String" },
+                @{ Path="HKLM:\SYSTEM\CurrentControlSet\Services\lfsvc\Service\Configuration"; Name="Status"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKLM:\SYSTEM\Maps"; Name="AutoUpdateEnabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}"; Name="SensorPermissionState"; Value="0"; OriginalValue="1"; Type="DWord" }
+            )
+        },
+        @{ 
+            Id="WPFTweaksWifi"; Name="Disable Wi-Fi Sense"; Category="Privacy"; Description="Prevents sharing Wi-Fi credentials with Facebook/Outlook contacts."; 
+            Registry=@( 
+                @{ Path="HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting"; Name="Value"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots"; Name="Value"; Value="0"; OriginalValue="1"; Type="DWord" }
+            ) 
+        },
+        @{ 
+            Id="WPFTweaksDisableNotifications"; Name="Disable Notifications"; Category="Privacy"; Description="Disables the Notification Center and Toast popups."; 
+            Registry=@( 
+                @{ Path="HKCU:\Software\Policies\Microsoft\Windows\Explorer"; Name="DisableNotificationCenter"; Value="1"; OriginalValue="<RemoveEntry>"; Type="DWord" },
+                @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications"; Name="ToastEnabled"; Value="0"; OriginalValue="1"; Type="DWord" }
+            )
+        },
+
+        # --- SYSTEM OPTIMIZATION ---
+        @{ 
+            Id="WPFTweaksServices"; Name="Optimize Services"; Category="System"; Description="Sets 100+ unused services to MANUAL (Safe Optimization)."; 
+            Service=@(
+                @{Name="AJRouter"; StartupType="Disabled"; OriginalType="Manual"},
+                @{Name="ALG"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="AppIDSvc"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="AppMgmt"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="AppReadiness"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="AppXSvc"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="Appinfo"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="AudioEndpointBuilder"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="AudioSrv"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="BITS"; StartupType="AutomaticDelayedStart"; OriginalType="Automatic"},
+                @{Name="Browser"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="DiagTrack"; StartupType="Disabled"; OriginalType="Automatic"},
+                @{Name="DialogBlockingService"; StartupType="Disabled"; OriginalType="Disabled"},
+                @{Name="Dnscache"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="DPS"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="FDResPub"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="Fax"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="HomeGroupListener"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="HomeGroupProvider"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="InstallService"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="InventorySvc"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="LanmanServer"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="LanmanWorkstation"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="MapsBroker"; StartupType="AutomaticDelayedStart"; OriginalType="Automatic"},
+                @{Name="Netlogon"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="Netman"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="PcaSvc"; StartupType="Manual"; OriginalType="Automatic"},
+                @{Name="PlugPlay"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="PrintNotify"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="RemoteRegistry"; StartupType="Disabled"; OriginalType="Disabled"},
+                @{Name="RpcSs"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="Spooler"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="SysMain"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="TrkWks"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="W32Time"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="WSearch"; StartupType="AutomaticDelayedStart"; OriginalType="Automatic"},
+                @{Name="WaaSMedicSvc"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="WinDefend"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="WinHttpAutoProxySvc"; StartupType="Manual"; OriginalType="Manual"},
+                @{Name="Winmgmt"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="WlanSvc"; StartupType="Automatic"; OriginalType="Automatic"},
+                @{Name="wuauserv"; StartupType="Manual"; OriginalType="Manual"}
+            )
+        },
+        @{ 
+            Id="WPFTweaksDVR"; Name="Disable GameDVR"; Category="Gaming"; Description="Disables Xbox Game Recording."; 
+            Registry=@( 
+                @{ Path="HKCU:\System\GameConfigStore"; Name="GameDVR_Enabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\System\GameConfigStore"; Name="GameDVR_FSEBehavior"; Value="2"; OriginalValue="0"; Type="DWord" },
+                @{ Path="HKCU:\System\GameConfigStore"; Name="GameDVR_HonorUserFSEBehaviorMode"; Value="1"; OriginalValue="0"; Type="DWord" },
+                @{ Path="HKCU:\System\GameConfigStore"; Name="GameDVR_EFSEFeatureFlags"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR"; Name="AllowGameDVR"; Value="0"; OriginalValue="1"; Type="DWord" }
+            ) 
+        },
+        @{ 
+            Id="WPFTweaksHiber"; Name="Disable Hibernation"; Category="System"; Description="Disables hiberfil.sys to save disk space."; 
+            Registry=@(
+                @{ Path="HKLM:\System\CurrentControlSet\Control\Session Manager\Power"; Name="HibernateEnabled"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FlyoutMenuSettings"; Name="ShowHibernateOption"; Value="0"; OriginalValue="1"; Type="DWord" }
+            );
+            InvokeScript="powercfg /hibernate off";
+            UndoScript="powercfg /hibernate on";
+        },
+        @{ 
+            Id="WPFToggleNumLock"; Name="Enable NumLock on Boot"; Category="System"; Description="Forces NumLock to be on when Windows starts."; 
+            Registry=@( 
+                @{ Path="HKU:\.Default\Control Panel\Keyboard"; Name="InitialKeyboardIndicators"; Value="2"; OriginalValue="0"; Type="String" },
+                @{ Path="HKCU:\Control Panel\Keyboard"; Name="InitialKeyboardIndicators"; Value="2"; OriginalValue="0"; Type="String" }
+            ) 
+        },
+        @{ 
+            Id="WPFTweaksUTC"; Name="Set Time to UTC"; Category="System"; Description="Fixes time sync issues when dual-booting with Linux."; 
+            Registry=@( @{ Path="HKLM:\SYSTEM\CurrentControlSet\Control\TimeZoneInformation"; Name="RealTimeIsUniversal"; Value="1"; OriginalValue="0"; Type="DWord" } ) 
+        },
+        @{ 
+            Id="WPFTweaksStorage"; Name="Disable Storage Sense"; Category="System"; Description="Prevents Windows from automatically deleting temp files."; 
+            Registry=@( @{ Path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\StorageSense\Parameters\StoragePolicy"; Name="01"; Value="0"; OriginalValue="1"; Type="DWord" } ) 
+        },
+
+        # --- NETWORK ---
+        @{ 
+            Id="WPFTweaksDisableipsix"; Name="Disable IPv6"; Category="Network"; Description="Disables IPv6 to force IPv4."; 
+            Registry=@( @{ Path="HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters"; Name="DisabledComponents"; Value="255"; OriginalValue="0"; Type="DWord" } );
+            InvokeScript="Disable-NetAdapterBinding -Name '*' -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue";
+            UndoScript="Enable-NetAdapterBinding -Name '*' -ComponentID ms_tcpip6 -ErrorAction SilentlyContinue"
+        },
+
+        # --- APPEARANCE & EXPLORER ---
+        @{ 
+            Id="WPFToggleDarkMode"; Name="Enable Dark Mode"; Category="Appearance"; Description="Sets Apps and System to Dark Theme"; 
+            Registry=@( 
+                @{ Path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"; Name="AppsUseLightTheme"; Value="0"; OriginalValue="1"; Type="DWord" }, 
+                @{ Path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"; Name="SystemUsesLightTheme"; Value="0"; OriginalValue="1"; Type="DWord" } 
+            ) 
+        },
+        @{ 
+            Id="WPFToggleBingSearch"; Name="Disable Bing Search"; Category="Appearance"; Description="Removes Bing results from Start Menu search."; 
+            Registry=@( @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"; Name="BingSearchEnabled"; Value="0"; OriginalValue="1"; Type="DWord" } ) 
+        },
+        @{ 
+            Id="WPFTweaksRightClickMenu"; Name="Classic Right-Click"; Category="Appearance"; Description="Restores Windows 10 style context menu (Win 11)."; 
+            InvokeScript="New-Item -Path 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Name 'InprocServer32' -Force -Value '' | Out-Null; Stop-Process -Name 'explorer' -Force";
+            UndoScript="Remove-Item -Path 'HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Recurse -Force -ErrorAction SilentlyContinue; Stop-Process -Name 'explorer' -Force";
+        },
+        @{ 
+            Id="WPFToggleTaskbarAlignment"; Name="Align Taskbar Left"; Category="Appearance"; Description="Moves Windows 11 Taskbar icons to the left."; 
+            Registry=@( @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Name="TaskbarAl"; Value="0"; OriginalValue="1"; Type="DWord" } ) 
+        },
+        @{ 
+            Id="WPFTweaksDisableExplorerAutoDiscovery"; Name="Disable Explorer Folder Discovery"; Category="Explorer"; Description="Stops Explorer from trying to guess folder content type."; 
+            InvokeScript="Remove-Item 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags' -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU' -Recurse -Force -ErrorAction SilentlyContinue; $allFolders = 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell'; if (!(Test-Path $allFolders)) { New-Item -Path $allFolders -Force | Out-Null }; New-ItemProperty -Path $allFolders -Name 'FolderType' -Value 'NotSpecified' -PropertyType String -Force | Out-Null; Stop-Process -Name 'explorer' -Force";
+            UndoScript="Remove-Item 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\Bags' -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU' -Recurse -Force -ErrorAction SilentlyContinue; Stop-Process -Name 'explorer' -Force"
+        },
+        @{ 
+            Id="WPFToggleHiddenFiles"; Name="Show Hidden Files"; Category="Explorer"; Description="Makes hidden files visible in Explorer."; 
+            Registry=@( @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Name="Hidden"; Value="1"; OriginalValue="0"; Type="DWord" } );
+            InvokeScript="Stop-Process -Name 'explorer' -Force"
+        },
+        @{ 
+            Id="WPFToggleShowExt"; Name="Show File Extensions"; Category="Explorer"; Description="Always show file extensions in Explorer."; 
+            Registry=@( @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Name="HideFileExt"; Value="0"; OriginalValue="1"; Type="DWord" } );
+            InvokeScript="Stop-Process -Name 'explorer' -Force"
+        },
+        @{ 
+            Id="WPFTweaksEndTaskOnTaskbar"; Name="Enable End Task"; Category="Explorer"; Description="Adds 'End Task' to Taskbar right-click menu."; 
+            Registry=@( @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings"; Name="TaskbarEndTask"; Value="1"; OriginalValue="0"; Type="DWord" } ) 
+        },
+
+        # --- INPUT ---
+        @{ 
+            Id="WPFToggleMouseAcceleration"; Name="Disable Mouse Accel"; Category="Input"; Description="Disables 'Enhance Pointer Precision'."; 
+            Registry=@( 
+                @{ Path="HKCU:\Control Panel\Mouse"; Name="MouseSpeed"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKCU:\Control Panel\Mouse"; Name="MouseThreshold1"; Value="0"; OriginalValue="6"; Type="DWord" },
+                @{ Path="HKCU:\Control Panel\Mouse"; Name="MouseThreshold2"; Value="0"; OriginalValue="10"; Type="DWord" }
+            ) 
+        },
+        @{ 
+            Id="WPFToggleStickyKeys"; Name="Disable Sticky Keys"; Category="Input"; Description="Disables the Sticky Keys shortcut."; 
+            Registry=@( @{ Path="HKCU:\Control Panel\Accessibility\StickyKeys"; Name="Flags"; Value="506"; OriginalValue="510"; Type="String" } ) 
+        },
+
+        # --- ADVANCED / DEBLOAT ---
+        @{ 
+            Id="WPFTweaksRemoveCopilot"; Name="Disable Copilot"; Category="Advanced Debloat"; Description="Disables the Microsoft Copilot AI integration (Win 11)."; 
+            Registry=@( 
+                @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Name="ShowCopilotButton"; Value="0"; OriginalValue="1"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot"; Name="TurnOffWindowsCopilot"; Value="1"; OriginalValue="0"; Type="DWord" },
+                @{ Path="HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot"; Name="TurnOffWindowsCopilot"; Value="1"; OriginalValue="0"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Microsoft\Windows\Shell\Copilot"; Name="IsCopilotAvailable"; Value="0"; OriginalValue="<RemoveEntry>"; Type="DWord" },
+                @{ Path="HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsCopilot"; Name="AllowCopilotRuntime"; Value="0"; OriginalValue="<RemoveEntry>"; Type="DWord" }
+            ) 
+        },
+        @{ 
+            Id="WPFTweaksRecallOff"; Name="Disable Recall (AI)"; Category="Advanced Debloat"; Description="Disables Windows Recall AI features (Win 11 24H2+)."; 
+            Registry=@( 
+                @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"; Name="DisableAIDataAnalysis"; Value="1"; OriginalValue="<RemoveEntry>"; Type="DWord" },
+                @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"; Name="AllowRecallEnablement"; Value="0"; OriginalValue="<RemoveEntry>"; Type="DWord" },
+                @{ Path="HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy"; Name="VerifiedAndReputablePolicyState"; Value="0"; OriginalValue="<RemoveEntry>"; Type="DWord" }
+            );
+            InvokeScript="DISM /Online /Disable-Feature /FeatureName:Recall /Quiet /NoRestart";
+            UndoScript="DISM /Online /Enable-Feature /FeatureName:Recall /Quiet /NoRestart"
+        },
+        @{ 
+            Id="WPFTweaksDisableEdge"; Name="Disable Edge"; Category="Advanced Debloat"; Description="Prevents Microsoft Edge from running via the 'DisallowRun' policy."; 
+            Registry=@( 
+                @{ Path="HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"; Name="DisallowRun"; Value="1"; OriginalValue="0"; Type="DWord" },
+                @{ Path="HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\DisallowRun"; Name="DisableEdge"; Value="msedge.exe"; OriginalValue="<RemoveEntry>"; Type="String" }
+            )
+        }
+    )
+
+    $sync.Software = @(
+        # Browsers
+        @{ Id="Google.Chrome"; Name="Google Chrome"; Category="Browsers"; Description="Web Browser" },
+        @{ Id="Mozilla.Firefox"; Name="Firefox"; Category="Browsers"; Description="Web Browser" },
+        @{ Id="Brave.Brave"; Name="Brave"; Category="Browsers"; Description="Privacy-focused Browser" },
+        @{ Id="Microsoft.Edge"; Name="Edge"; Category="Browsers"; Description="Microsoft Edge" },
+        
+        # Utilities
+        @{ Id="7zip.7zip"; Name="7-Zip"; Category="Utilities"; Description="File Archiver" },
+        @{ Id="AdrienAllard.FileConverter"; Name="File Converter"; Category="Utilities"; Description="Context menu file converter." },
+        @{ Id="Nilesoft.Shell"; Name="Nilesoft Shell"; Category="Utilities"; Description="Fixes Windows 11 context menu." },
+        @{ Id="OCCT.OCCT"; Name="OCCT"; Category="Utilities"; Description="OverClock Checking Tool (Stress Test)." },
+        @{ Id="RevoUninstaller.RevoUninstaller"; Name="Revo Uninstaller"; Category="Utilities"; Description="Advanced uninstaller." },
+        @{ Id="RARLab.WinRAR"; Name="WinRAR"; Category="Utilities"; Description="Archive manager." },
+        @{ Id="AntibodySoftware.WizTree"; Name="WizTree"; Category="Utilities"; Description="Disk Space Analyzer" },
+        @{ Id="Microsoft.PowerToys"; Name="PowerToys"; Category="Utilities"; Description="System Utilities" },
+        @{ Id="PuTTY.PuTTY"; Name="PuTTY"; Category="Utilities"; Description="SSH/Telnet Client" },
+        @{ Id="WinSCP.WinSCP"; Name="WinSCP"; Category="Utilities"; Description="SFTP/FTP Client" },
+        
+        # Development
+        @{ Id="Anysphere.Cursor"; Name="Cursor IDE"; Category="Development"; Description="AI-first code editor." },
+        @{ Id="Microsoft.VisualStudioCode"; Name="VS Code"; Category="Development"; Description="Code Editor" },
+        @{ Id="Git.Git"; Name="Git"; Category="Development"; Description="Version Control" },
+        @{ Id="Microsoft.PowerShell"; Name="PowerShell 7"; Category="Development"; Description="Latest Cross-platform Shell" },
+        @{ Id="Notepad++.Notepad++"; Name="Notepad++"; Category="Development"; Description="Text Editor" },
+        @{ Id="Python.Python.3.12"; Name="Python 3"; Category="Development"; Description="Programming Language" },
+
+        # Multimedia
+        @{ Id="DuongDieuPhap.ImageGlass"; Name="ImageGlass"; Category="Multimedia"; Description="Lightweight image viewer." },
+        @{ Id="Spotify.Spotify"; Name="Spotify"; Category="Multimedia"; Description="Music streaming." },
+        @{ Id="VideoLAN.VLC"; Name="VLC Media Player"; Category="Multimedia"; Description="Plays anything" },
+        @{ Id="OBSProject.OBSStudio"; Name="OBS Studio"; Category="Multimedia"; Description="Streaming Software" },
+        @{ Id="Audacity.Audacity"; Name="Audacity"; Category="Multimedia"; Description="Audio Editor" },
+        @{ Id="HandBrake.HandBrake"; Name="HandBrake"; Category="Multimedia"; Description="Video Transcoder" },
+        @{ Id="GIMP.GIMP"; Name="GIMP"; Category="Multimedia"; Description="Image Editor" },
+
+        # Communications
+        @{ Id="Discord.Discord"; Name="Discord"; Category="Social"; Description="Chat & Streaming" },
+        @{ Id="Telegram.TelegramDesktop"; Name="Telegram"; Category="Social"; Description="Messaging App" },
+        @{ Id="Zoom.Zoom"; Name="Zoom"; Category="Social"; Description="Video Conferencing" },
+        @{ Id="SlackTechnologies.Slack"; Name="Slack"; Category="Social"; Description="Team Collaboration" },
+
+        # Gaming
+        @{ Id="Nvidia.NvidiaApp"; Name="Nvidia App"; Category="Gaming"; Description="Modern replacement for GeForce Experience." },
+        @{ Id="Valve.Steam"; Name="Steam"; Category="Gaming"; Description="Game Store" },
+        @{ Id="EpicGames.EpicGamesLauncher"; Name="Epic Games"; Category="Gaming"; Description="Game Store" },
+
+        # Internet
+        @{ Id="qBittorrent.qBittorrent"; Name="qBittorrent"; Category="Internet"; Description="Free BitTorrent client." },
+
+        # System Runtimes
+        @{ Id="Microsoft.VCRedist.2015+.x64"; Name="Visual C++ Redists"; Category="System"; Description="Common runtimes for games/apps." }
+    )
+
+    # --- 4. RUNSPACE POOL SETUP ---
+    $runspacePool = [runspacefactory]::CreateRunspacePool(1, [int]$env:NUMBER_OF_PROCESSORS)
+    $runspacePool.ApartmentState = "STA"
+    $runspacePool.ThreadOptions = "ReuseThread"
+    $runspacePool.Open()
+    $sync.RunspacePool = $runspacePool
+
+    # --- 5. WORKER SCRIPT BLOCK ---
+    $workerScript = {
+        param($SyncHash, $Action, $Payload)
+        
+        # --- HELPER FUNCTIONS ---
+        function Set-RegValue {
+            param ($Name, $Path, $Type, $Value)
+            try {
+                if(!(Test-Path 'HKU:\')) { New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS -ErrorAction SilentlyContinue | Out-Null }
+                
+                If (!(Test-Path $Path)) { New-Item -Path $Path -Force -ErrorAction Stop | Out-Null }
+
+                if ($Value -ne "<RemoveEntry>") {
+                    Set-ItemProperty -Path $Path -Name $Name -Type $Type -Value $Value -Force -ErrorAction Stop | Out-Null
+                } else {
+                    Remove-ItemProperty -Path $Path -Name $Name -Force -ErrorAction Stop | Out-Null
+                }
+            } catch {}
+        }
+
+        function Set-SvcConfig {
+            param ($Name, $StartupType)
+            try {
+                $service = Get-Service -Name $Name -ErrorAction Stop
+                $service | Set-Service -StartupType $StartupType -ErrorAction Stop
+            } catch {}
+        }
+
+        function Set-TaskState {
+            param ($Name, $State)
+            try {
+                if($State -eq "Disabled") { Disable-ScheduledTask -TaskName $Name -ErrorAction Stop }
+                if($State -eq "Enabled") { Enable-ScheduledTask -TaskName $Name -ErrorAction Stop }
+            } catch {}
+        }
+
+        function Invoke-CustomScript {
+            param ($scriptblock)
+            try { Invoke-Command $scriptblock -ErrorAction Stop } catch {}
+        }
+
+        # --- CORE TWEAK ENGINE ---
+        function Process-TweakBatch {
+            param($TweakIds, $Undo=$false) 
+            if (-not $TweakIds) { return }
+            
+            # Map Undo/Apply fields
+            if($Undo) {
+                $Values = @{ Registry="OriginalValue"; ScheduledTask="OriginalState"; Service="OriginalType"; ScriptType="UndoScript" }
+            } else {
+                $Values = @{ Registry="Value"; ScheduledTask="State"; Service="StartupType"; ScriptType="InvokeScript" }
+            }
+
+            foreach ($tId in $TweakIds) {
+                if ([string]::IsNullOrWhiteSpace($tId)) { continue }
+                $tweak = $SyncHash.Tweaks | Where-Object { $_.Id -eq $tId }
+                if (-not $tweak) { continue }
+                
+                $statusMsg = if ($Undo) { "UNDO" } else { "APPLY" }
+                [Console]::WriteLine("[$statusMsg] $($tweak.Name)...")
+                
+                # Registry
+                if($tweak.Registry) {
+                    foreach($reg in $tweak.Registry) {
+                        Set-RegValue -Name $reg.Name -Path $reg.Path -Type $reg.Type -Value $reg.$($Values.Registry)
+                    }
+                }
+                # Services
+                if($tweak.Service) {
+                    foreach($svc in $tweak.Service) {
+                        Set-SvcConfig -Name $svc.Name -StartupType $svc.$($Values.Service)
+                    }
+                }
+                # Scheduled Tasks
+                if($tweak.ScheduledTask) {
+                    foreach($task in $tweak.ScheduledTask) {
+                        Set-TaskState -Name $task.Name -State $task.$($Values.ScheduledTask)
+                    }
+                }
+                # Scripts
+                if($tweak.$($Values.ScriptType)) {
+                    $sb = [scriptblock]::Create($tweak.$($Values.ScriptType))
+                    Invoke-CustomScript -scriptblock $sb
+                }
+            }
+        }
+
+        function Manage-Package {
+            param($Id, $Mode) 
+            $cmd = if ($SyncHash.PackageManager -eq "winget") { "winget" } else { "choco" }
+            $argList = @()
+            if ($SyncHash.PackageManager -eq "winget") {
+                switch ($Mode) {
+                    "Install"   { $argList = @("install", "--id", $Id, "-e", "--silent", "--accept-source-agreements", "--accept-package-agreements") }
+                    "Uninstall" { $argList = @("uninstall", "--id", $Id, "-e", "--silent") }
+                    "Upgrade"   { $argList = @("upgrade", "--id", $Id, "-e", "--silent", "--accept-source-agreements", "--accept-package-agreements") }
+                }
+            } else {
+                # Heuristic attempt to convert Winget ID to Choco ID (Grab last part)
+                $Id = $Id.Split(".")[-1]; $argList = @($Mode.ToLower(), $Id, "-y")
+            }
+            Start-Process -FilePath $cmd -ArgumentList $argList -Wait -NoNewWindow
+        }
+
+        try {
+            switch ($Action) {
+                "LoadPower" { 
+                    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                    $raw = powercfg.exe -list
+                    $plans = @()
+                    foreach ($l in $raw) {
+                        if ($l -match '([a-fA-F0-9]{8}-(?:[a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12})\s*\(([^)]+)\)') {
+                            $plans += @{ Guid=$matches[1]; Name=$matches[2]; Status=$(if ($l -match '\*\s*$') { "Active" } else { "Inactive" }) }
+                        }
+                    }
+                    $SyncHash.PowerPlans = $plans
+                }
+                "SetPower" { powercfg.exe -setactive $Payload; $SyncHash.ActionQueue += "LoadPower" }
+                "AddUltimate" { powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61; $SyncHash.ActionQueue += "LoadPower" }
+                "DeletePower" { powercfg -delete $Payload; $SyncHash.ActionQueue += "LoadPower" }
+
+                "ApplyTweak" { Process-TweakBatch -TweakIds @($Payload) -Undo $false }
+                "UndoTweak" { Process-TweakBatch -TweakIds @($Payload) -Undo $true }
+                "ApplyTweakBatch" { Process-TweakBatch -TweakIds $Payload -Undo $false }
+                "UndoTweakBatch" { Process-TweakBatch -TweakIds $Payload -Undo $true }
+                
+                "CreateRestorePoint" {
+                    [Console]::WriteLine("[INFO] Creating System Restore Point...")
+                    try {
+                        Enable-ComputerRestore -Drive "$env:SystemDrive" -ErrorAction SilentlyContinue
+                        Checkpoint-Computer -Description "Perdanga Manager Restore Point" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
+                        [Console]::WriteLine("   -> Success.")
+                    } catch { throw "Could not create restore point. $($_.Exception.Message)" }
+                }
+                
+                "WU_GetStatus" {
+                    $auPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+                    $noAutoUpdate = (Get-ItemProperty -Path $auPath -Name "NoAutoUpdate" -ErrorAction SilentlyContinue).NoAutoUpdate
+                    if ($noAutoUpdate -eq 1) { $SyncHash.WUStatus = "Disabled" }
+                    else {
+                        $uxPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+                        $deferral = (Get-ItemProperty -Path $uxPath -Name "DeferFeatureUpdatesPeriodInDays" -ErrorAction SilentlyContinue).DeferFeatureUpdatesPeriodInDays
+                        if ($deferral -eq 365) { $SyncHash.WUStatus = "Security Only" }
+                        else { $SyncHash.WUStatus = "Default (Enabled)" }
+                    }
+                }
+
+                "WU_SetDefault" {
+                    [Console]::WriteLine("[WU] Restoring Default Settings...")
+                    if (!(Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU")) { New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Force | Out-Null }
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "NoAutoUpdate" -Type DWord -Value 0 -Force
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "AUOptions" -Type DWord -Value 3 -Force
+                    
+                    if (!(Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config")) { New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config" -Force | Out-Null }
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config" -Name "DODownloadMode" -Type DWord -Value 1 -Force
+
+                    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WaaSMedicSvc" -Name "Start" -Type DWord -Value 3 -ErrorAction SilentlyContinue
+                    Remove-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WaaSMedicSvc" -Name "FailureActions" -ErrorAction SilentlyContinue
+
+                    $services = @(
+                        @{Name = "BITS"; StartupType = "Manual"},
+                        @{Name = "wuauserv"; StartupType = "Manual"},
+                        @{Name = "UsoSvc"; StartupType = "Automatic"},
+                        @{Name = "uhssvc"; StartupType = "Disabled"},
+                        @{Name = "WaaSMedicSvc"; StartupType = "Manual"}
+                    )
+                    foreach ($service in $services) {
+                        try {
+                            Set-Service -Name $service.Name -StartupType $service.StartupType -ErrorAction SilentlyContinue
+                            Start-Process -FilePath "sc.exe" -ArgumentList "failure `"$($service.Name)`" reset= 86400 actions= restart/60000/restart/60000/restart/60000" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+                            if ($service.StartupType -eq "Automatic") { Start-Service -Name $service.Name -ErrorAction SilentlyContinue }
+                        } catch {}
+                    }
+                    
+                    Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings" -Name "DeferFeatureUpdatesPeriodInDays" -ErrorAction SilentlyContinue
+                    Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings" -Name "DeferQualityUpdatesPeriodInDays" -ErrorAction SilentlyContinue
+                    Start-Process -FilePath "gpupdate" -ArgumentList "/force" -Wait -WindowStyle Hidden
+                    [Console]::WriteLine("   -> Defaults Restored.")
+                }
+
+                "WU_SetSecurity" {
+                    [Console]::WriteLine("[WU] Setting Security-Only Updates...")
+                    if (!(Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching")) { New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" -Force | Out-Null }
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" -Name "DontPromptForWindowsUpdate" -Type DWord -Value 1 -Force
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DriverSearching" -Name "DontSearchWindowsUpdate" -Type DWord -Value 1 -Force
+                    if (!(Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU")) { New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Force | Out-Null }
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "NoAutoRebootWithLoggedOnUsers" -Type DWord -Value 1 -Force
+                    if (!(Test-Path "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings")) { New-Item -Path "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings" -Force | Out-Null }
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings" -Name "BranchReadinessLevel" -Type DWord -Value 20 -Force
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings" -Name "DeferFeatureUpdatesPeriodInDays" -Type DWord -Value 365 -Force
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings" -Name "DeferQualityUpdatesPeriodInDays" -Type DWord -Value 4 -Force
+                    [Console]::WriteLine("   -> Security Mode Applied.")
+                }
+
+                "WU_SetDisabled" {
+                    [Console]::WriteLine("[WU] Disabling Windows Updates...")
+                    if (!(Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU")) { New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Force | Out-Null }
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "NoAutoUpdate" -Type DWord -Value 1 -Force
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "AUOptions" -Type DWord -Value 1 -Force
+                    if (!(Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config")) { New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config" -Force | Out-Null }
+                    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config" -Name "DODownloadMode" -Type DWord -Value 0 -Force
+                    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WaaSMedicSvc" -Name "Start" -Type DWord -Value 4 -ErrorAction SilentlyContinue
+                    $failureActions = [byte[]](0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x03,0x00,0x00,0x00,0x14,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xc0,0xd4,0x01,0x00,0x00,0x00,0x00,0x00,0xe0,0x93,0x04,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+                    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WaaSMedicSvc" -Name "FailureActions" -Type Binary -Value $failureActions -ErrorAction SilentlyContinue
+                    $services = @("BITS", "wuauserv", "UsoSvc", "uhssvc", "WaaSMedicSvc")
+                    foreach ($service in $services) {
+                        try {
+                            Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                            Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+                            Start-Process -FilePath "sc.exe" -ArgumentList "failure `"$service`" reset= 0 actions= `"`"" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+                        } catch {}
+                    }
+                    $taskPaths = @('\Microsoft\Windows\InstallService\*', '\Microsoft\Windows\UpdateOrchestrator\*', '\Microsoft\Windows\UpdateAssistant\*', '\Microsoft\Windows\WaaSMedic\*', '\Microsoft\Windows\WindowsUpdate\*', '\Microsoft\WindowsUpdate\*')
+                    foreach ($taskPath in $taskPaths) { try { Get-ScheduledTask -TaskPath $taskPath -ErrorAction SilentlyContinue | Disable-ScheduledTask -ErrorAction SilentlyContinue } catch {} }
+                    [Console]::WriteLine("   -> Updates Disabled.")
+                }
+
+                "CheckTweaks" {
+                    $appliedIds = @()
+                    if (!(Test-Path 'HKU:\')) { New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS -ErrorAction SilentlyContinue | Out-Null }
+
+                    foreach ($tweak in $SyncHash.Tweaks) {
+                        $isApplied = $true
+                        if ($tweak.Registry) {
+                            foreach ($reg in $tweak.Registry) {
+                                try {
+                                    $regVal = Get-ItemProperty -Path $reg.Path -Name $reg.Name -ErrorAction Stop | Select-Object -ExpandProperty $reg.Name
+                                    if ($regVal -ne $reg.Value) { $isApplied = $false; break }
+                                } catch { 
+                                    if ($reg.OriginalValue -eq "<RemoveEntry>") { if (Test-Path $reg.Path) { $isApplied = $false; break } } else { $isApplied = $false; break }
+                                }
+                            }
+                        }
+                        if ($isApplied -and $tweak.Service) {
+                            foreach ($svc in $tweak.Service) {
+                                $s = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
+                                # Safe Optimization Logic: If service is supposed to be Disabled/Manual, check if it's currently correct
+                                if ($s) {
+                                    if ($svc.StartupType -eq "Disabled" -and $s.StartType -ne "Disabled") { $isApplied = $false; break }
+                                    if ($svc.StartupType -eq "Manual" -and $s.StartType -eq "Automatic") { $isApplied = $false; break }
+                                }
+                            }
+                        }
+                        if ($isApplied -and $tweak.ScheduledTask) {
+                            foreach ($task in $tweak.ScheduledTask) {
+                                try {
+                                    $tName = $task.Name; $tPath = "\"
+                                    if($task.Name.Contains("\")) {
+                                        $tPath = $task.Name.Substring(0, $task.Name.LastIndexOf("\"))
+                                        $tName = $task.Name.Substring($task.Name.LastIndexOf("\")+1)
+                                    }
+                                    $t = Get-ScheduledTask -TaskName $tName -TaskPath $tPath -ErrorAction SilentlyContinue
+                                    if ($t -and $t.State -ne $task.State) { $isApplied = $false; break }
+                                } catch { }
+                            }
+                        }
+                        if ($isApplied) { $appliedIds += $tweak.Id }
+                    }
+                    $SyncHash.AppliedTweaks = $appliedIds
+                }
+
+                "CheckInstalled" {
+                    try {
+                        $installedIds = @()
+                        if ($SyncHash.PackageManager -eq "winget") {
+                            $cmd = "winget list"
+                            $rawList = Invoke-Expression $cmd | Out-String
+                            foreach ($sw in $SyncHash.Software) {
+                                if ($rawList -like "*$($sw.Id)*") { $installedIds += $sw.Id }
+                            }
+                        } else {
+                            # --- ROBUST CHOCO DETECTION ---
+                            # Background threads often lack the PATH environment to find 'choco'
+                            # We check common locations if not in PATH
+                            $chocoExe = "choco"
+                            if (Get-Command "choco" -ErrorAction SilentlyContinue) { 
+                                $chocoExe = "choco" 
+                            } elseif (Test-Path "$env:ProgramData\chocolatey\bin\choco.exe") { 
+                                $chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe" 
+                            }
+
+                            # Use Start-Process to ensure we capture output even if Invoke-Expression fails
+                            $pInfo = New-Object System.Diagnostics.ProcessStartInfo
+                            $pInfo.FileName = $chocoExe
+                            $pInfo.Arguments = "list --local-only --limit-output" # limit-output gives "name|version" which is easier to parse
+                            $pInfo.RedirectStandardOutput = $true
+                            $pInfo.UseShellExecute = $false
+                            $pInfo.CreateNoWindow = $true
+                            $p = [System.Diagnostics.Process]::Start($pInfo)
+                            $rawList = $p.StandardOutput.ReadToEnd()
+                            $p.WaitForExit()
+
+                            foreach ($sw in $SyncHash.Software) {
+                                # Heuristic matching:
+                                # 1. Match the exact suffix (e.g. "Google.Chrome" -> "Chrome")
+                                # 2. Match the Name (e.g. "Firefox")
+                                $suffix = $sw.Id.Split(".")[-1]
+                                $name = $sw.Name.Replace(" ", "").ToLower() # Simple normalization
+                                
+                                if ($rawList -like "*$suffix|*") { $installedIds += $sw.Id }
+                                elseif ($rawList -like "*$name|*") { $installedIds += $sw.Id }
+                            }
+                        }
+                        $SyncHash.InstalledApps = $installedIds
+                    } catch {}
+                }
+
+                "InstallApp" { Manage-Package -Id $Payload -Mode "Install"; $SyncHash.ActionQueue += "CheckInstalled" }
+                "UninstallApp" { Manage-Package -Id $Payload -Mode "Uninstall"; $SyncHash.ActionQueue += "CheckInstalled" }
+                "UpgradeApp" { Manage-Package -Id $Payload -Mode "Upgrade"; $SyncHash.ActionQueue += "CheckInstalled" }
+
+                "RunCommand" {
+                    $cmd = $Payload; $args = $null
+                    if ($Payload -match "^(\S+)\s+(.+)$") { $cmd = $matches[1]; $args = $matches[2] }
+                    if ($args) { Start-Process -FilePath $cmd -ArgumentList $args -ErrorAction SilentlyContinue } 
+                    else { Start-Process -FilePath $cmd -ErrorAction SilentlyContinue }
+                }
+
+                "SetDNS" {
+                    $provider = $Payload
+                    $dnsMap = @{
+                        "Google" = @("8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844")
+                        "Cloudflare" = @("1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001")
+                    }
+                    try {
+                        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+                        [Console]::WriteLine("[DNS] Configuring $provider DNS on active adapters...")
+                        foreach ($adapter in $adapters) {
+                            if ($provider -eq "DHCP") {
+                                Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses -ErrorAction SilentlyContinue
+                                [Console]::WriteLine("   -> DHCP set on $($adapter.Name)")
+                            } 
+                            elseif ($dnsMap.ContainsKey($provider)) {
+                                $ips = $dnsMap[$provider]
+                                Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ($ips[0], $ips[1]) -ErrorAction SilentlyContinue
+                                try { Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ($ips[2], $ips[3]) -ErrorAction SilentlyContinue } catch {}
+                                [Console]::WriteLine("   -> $provider DNS set on $($adapter.Name)")
+                            }
+                        }
+                        Clear-DnsClientCache
+                    } catch { [Console]::WriteLine("[ERROR] Failed to set DNS: $($_.Exception.Message)") }
+                }
+
+                "Maint_ResetUpdates" {
+                    $services = @("BITS", "wuauserv", "appidsvc", "cryptsvc")
+                    foreach ($svc in $services) { Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue }
+                    if (Test-Path "$env:systemroot\SoftwareDistribution") { Rename-Item "$env:systemroot\SoftwareDistribution" "$env:systemroot\SoftwareDistribution.bak" -Force -ErrorAction SilentlyContinue }
+                    if (Test-Path "$env:systemroot\System32\Catroot2") { Rename-Item "$env:systemroot\System32\Catroot2" "$env:systemroot\System32\Catroot2.bak" -Force -ErrorAction SilentlyContinue }
+                    foreach ($svc in $services) { Start-Service -Name $svc -ErrorAction SilentlyContinue }
+                    Start-Process "wuauclt" -ArgumentList "/resetauthorization", "/detectnow" -NoNewWindow -Wait
+                }
+                "Maint_SystemScan" {
+                    Start-Process "chkdsk.exe" -ArgumentList "/scan" -NoNewWindow -Wait
+                    Start-Process "sfc.exe" -ArgumentList "/scannow" -NoNewWindow -Wait
+                    Start-Process "dism.exe" -ArgumentList "/Online /Cleanup-Image /RestoreHealth" -NoNewWindow -Wait
+                    Start-Process "sfc.exe" -ArgumentList "/scannow" -NoNewWindow -Wait
+                }
+                "Maint_Cleanup" {
+                    Start-Process cleanmgr.exe -ArgumentList "/d C: /VERYLOWDISK" -NoNewWindow -Wait
+                    dism /online /Cleanup-Image /StartComponentCleanup /ResetBase
+                }
+                "Maint_Network" { 
+                    netsh winsock reset; netsh int ip reset; netsh winhttp reset proxy; ipconfig /flushdns 
+                }
+                "Maint_ReinstallPackageManager" {
+                    if ($SyncHash.PackageManager -eq "winget") { Start-Process -FilePath "winget" -ArgumentList "install -e --accept-source-agreements --accept-package-agreements Microsoft.AppInstaller" -Wait -NoNewWindow } 
+                    elseif ($SyncHash.PackageManager -eq "chocolatey") { Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')) }
+                }
+                "Maint_RemoveOneDrive" {
+                    # Robust Cleanup Logic (Based on External Source)
+                    $OneDrivePath = $env:OneDrive
+                    [Console]::WriteLine("[INFO] Removing OneDrive (Deep Clean)...")
+                    
+                    # Kill Processes
+                    Stop-Process -Name "*OneDrive*" -Force -ErrorAction SilentlyContinue
+                    
+                    # Uninstall Command (Check)
+                    $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\OneDriveSetup.exe"
+                    $msStorePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Applications\*OneDrive*"
+
+                    if (Test-Path $regPath) {
+                        $uninstallStr = (Get-ItemProperty $regPath).UninstallString
+                        $exe = $uninstallStr.Split(" ")[0]
+                        $args = $uninstallStr.Substring($exe.Length) + " /silent"
+                        Start-Process -FilePath $exe -ArgumentList $args -Wait -NoNewWindow
+                    } elseif (Test-Path $msStorePath) {
+                        Start-Process -FilePath winget -ArgumentList "uninstall -e --purge --accept-source-agreements Microsoft.OneDrive" -NoNewWindow -Wait
+                    } else {
+                        if (Test-Path "$env:SystemRoot\System32\OneDriveSetup.exe") { Start-Process "$env:SystemRoot\System32\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -NoNewWindow } 
+                        elseif (Test-Path "$env:SystemRoot\SysWOW64\OneDriveSetup.exe") { Start-Process "$env:SystemRoot\SysWOW64\OneDriveSetup.exe" -ArgumentList "/uninstall" -Wait -NoNewWindow }
+                    }
+                    
+                    # Cleanup Directories
+                    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$env:localappdata\Microsoft\OneDrive"
+                    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$env:programdata\Microsoft OneDrive"
+                    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$env:OneDrive"
+                    Remove-Item -Path "HKCU:\Software\Microsoft\OneDrive" -Recurse -Force -ErrorAction SilentlyContinue
+                    
+                    # Cleanup Explorer Namespace
+                    Set-RegValue -Name "System.IsPinnedToNameSpaceTree" -Path "HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" -Value 0 -Type "DWord"
+                    Set-RegValue -Name "System.IsPinnedToNameSpaceTree" -Path "HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}" -Value 0 -Type "DWord"
+                    
+                    # Remove Run hooks
+                    Set-RegValue -Name "OneDrive" -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Value "<RemoveEntry>" -Type "String"
+                    
+                    # Remove Environment Variable
+                    [Environment]::SetEnvironmentVariable("OneDrive", $null, "User")
+                    
+                    taskkill.exe /F /IM "explorer.exe"
+                    Start-Process "explorer.exe"
+                    [Console]::WriteLine("   -> OneDrive Removed.")
+                }
+                "Maint_OOSU10" {
+                    $url = "https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe"; $dest = "$env:TEMP\OOSU10.exe"
+                    Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing; Start-Process -FilePath $dest -Wait
+                }
+                "Maint_Autoruns" {
+                    $zip = "$env:TEMP\Autoruns.zip"; $dest = "$env:TEMP\Autoruns"
+                    Invoke-WebRequest "https://download.sysinternals.com/files/Autoruns.zip" -OutFile $zip -UseBasicParsing
+                    Expand-Archive -Path $zip -DestinationPath $dest -Force; Start-Process -FilePath "$dest\Autoruns64.exe" -Wait
+                }
+                "Maint_EnableSSH" {
+                     $cap = Get-WindowsCapability -Online | Where-Object { $_.Name -like "OpenSSH.Server*" }
+                     if ($cap.State -ne "Installed") { Add-WindowsCapability -Online -Name $cap.Name }
+                     Start-Service sshd; Set-Service sshd -StartupType Automatic
+                     Start-Service ssh-agent; Set-Service ssh-agent -StartupType Automatic
+                     if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue)) { New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 }
+                }
+                "Maint_AdobeClean" {
+                    $url = "https://swupmf.adobe.com/webfeed/CleanerTool/win/AdobeCreativeCloudCleanerTool.exe"; $dest = "$env:TEMP\AdobeCreativeCloudCleanerTool.exe"
+                    Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+                    Start-Process -FilePath $dest -Wait
+                }
+                "RestartExplorer" {
+                    Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
+                    [Console]::WriteLine("[INFO] Explorer restarted.")
+                }
+            }
+            if ($Action -notmatch "WU_GetStatus") { $SyncHash.Result = "Success" }
+        }
+        catch {
+            $SyncHash.Result = "Error"
+            $SyncHash.ErrorMessage = $_.Exception.Message
+        }
+    }
+
+    # --- 6. GUI SETUP ---
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "Perdanga System Manager"
+    $form.Size = New-Object System.Drawing.Size(1280, 750)
+    $form.StartPosition = "CenterScreen"
+    $form.MinimumSize = New-Object System.Drawing.Size(950, 600)
+    $sync.Form = $form
+
+    # --- Theme Colors (Minimalist Modern) ---
+    $colDarkBg      = [System.Drawing.Color]::FromArgb(30, 30, 35)
+    $colSideBar     = [System.Drawing.Color]::FromArgb(20, 20, 25)
+    $colPanelBg     = [System.Drawing.Color]::FromArgb(40, 40, 45)
+    $colBtnSurface  = [System.Drawing.Color]::FromArgb(50, 50, 55) # New Neutral Button Surface
+    
+    # Pastel / Matte Palette for Minimalist Look
+    $colAccentBlue  = [System.Drawing.Color]::FromArgb(100, 140, 210)  # Soft Slate Blue
+    $colAccentGreen = [System.Drawing.Color]::FromArgb(100, 180, 130)  # Soft Sage Green
+    $colAccentPurple= [System.Drawing.Color]::FromArgb(170, 110, 200)  # Muted Lavender
+    $colAccentRed   = [System.Drawing.Color]::FromArgb(210, 100, 100)  # Soft Coral/Red
+    $colAccentOrange= [System.Drawing.Color]::FromArgb(220, 150, 80)   # Muted Amber
+    $colAccentCyan  = [System.Drawing.Color]::FromArgb(80, 200, 210)   # Soft Teal
+    $colAccentGray  = [System.Drawing.Color]::FromArgb(140, 140, 145)  # Medium Gray
+
+    $colTextWhite   = [System.Drawing.Color]::White
+    $colTextGray    = [System.Drawing.Color]::Gainsboro
+    $colBorder      = [System.Drawing.Color]::FromArgb(60, 60, 65)
+
+    $form.BackColor = $colDarkBg
+    $fontStd  = New-Object System.Drawing.Font("Segoe UI", 10)
+    $fontBold = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $fontHead = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
+    $fontMenu = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+
+    # --- TIMER ---
+    $uiTimer = New-Object System.Windows.Forms.Timer
+    $uiTimer.Interval = 100
+    $uiTimer.Tag = $null
+    
+    # --- CONTROLS ---
+    $splitMain = New-Object System.Windows.Forms.SplitContainer; $splitMain.Dock = "Fill"; $splitMain.FixedPanel = "Panel1"; $splitMain.SplitterDistance = 260; $splitMain.Panel1.BackColor = $colSideBar; $splitMain.Panel2.BackColor = $colDarkBg; $form.Controls.Add($splitMain)
+
+    # Sidebar
+    $lblMenuTitle = New-Object System.Windows.Forms.Label; $lblMenuTitle.Text = "  MENU"; $lblMenuTitle.Dock = "Top"; $lblMenuTitle.Height = 70; $lblMenuTitle.Font = $fontMenu; $lblMenuTitle.ForeColor = [System.Drawing.Color]::Gray; $lblMenuTitle.TextAlign = "MiddleLeft"; $splitMain.Panel1.Controls.Add($lblMenuTitle)
+    $flowMenu = New-Object System.Windows.Forms.FlowLayoutPanel; $flowMenu.Dock = "Fill"; $flowMenu.FlowDirection = "TopDown"; $flowMenu.WrapContents = $false; $flowMenu.Padding = New-Object System.Windows.Forms.Padding(0, 10, 0, 0); $splitMain.Panel1.Controls.Add($flowMenu); $flowMenu.BringToFront()
+    
+    $sync.ViewColors = @{ "Tweaks"=$colAccentPurple; "Installs"=$colAccentGreen; "Maintenance"=$colAccentOrange; "WindowsUpdate"=$colAccentBlue; "Power"=$colAccentRed; "Tools"=$colAccentGray }
+
+    function New-MenuButton($Text, $Tag, $ToolTipText) {
+        $BaseColor = $sync.ViewColors[$Tag]
+        $btn = New-Object System.Windows.Forms.Button; $btn.Text = "  $Text"; $btn.Tag = $Tag; $btn.Width = 260; $btn.Height = 55; $btn.FlatStyle = "Flat"; $btn.FlatAppearance.BorderSize = 0; $btn.Font = $fontStd; $btn.ForeColor = $colTextGray; $btn.TextAlign = "MiddleLeft"; $btn.Cursor = [System.Windows.Forms.Cursors]::Hand; $btn.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 2); $sync.MenuButtons[$Tag] = $btn
+        $tooltip = New-Object System.Windows.Forms.ToolTip
+        $tooltip.SetToolTip($btn, $ToolTipText)
+        $btn.Add_Click({ if ($script:currentView -ne $this.Tag) { Set-View $this.Tag } })
+        return $btn
+    }
+
+    $flowMenu.Controls.Add((New-MenuButton "System Tweaks" "Tweaks" "Apply privacy and performance tweaks"))
+    $flowMenu.Controls.Add((New-MenuButton "Install Apps" "Installs" "Batch install software via Winget or Chocolatey"))
+    $flowMenu.Controls.Add((New-MenuButton "Maintenance" "Maintenance" "Repair and cleanup tools"))
+    $flowMenu.Controls.Add((New-MenuButton "Windows Update" "WindowsUpdate" "Manage Windows Update policies"))
+    $flowMenu.Controls.Add((New-MenuButton "Power Config" "Power" "Manage Power Plans"))
+    # Removed Windows Features as requested
+    $flowMenu.Controls.Add((New-MenuButton "Quick Tools" "Tools" "Shortcuts to common system panels"))
+
+    # --- Status Strip ---
+    $statusStrip = New-Object System.Windows.Forms.StatusStrip; $statusStrip.BackColor = $colSideBar; $statusStrip.ForeColor = $colTextWhite
+    $lblStatus = New-Object System.Windows.Forms.ToolStripStatusLabel; $lblStatus.Text = "Ready"; $lblStatus.Spring = $true; $lblStatus.TextAlign = "MiddleLeft"
+    
+    # ProgressBar REMOVED here
+    
+    $statusStrip.Items.AddRange(@($lblStatus)); $form.Controls.Add($statusStrip)
+
+    # --- PANELS FOR CONTENT ---
+    
+    # Header Panel
+    $pnlHeader = New-Object System.Windows.Forms.Panel; $pnlHeader.Dock = "Top"; $pnlHeader.Height = 60; $pnlHeader.BackColor = $colDarkBg; $pnlHeader.Padding = New-Object System.Windows.Forms.Padding(20, 15, 0, 0)
+    $lblHeaderTitle = New-Object System.Windows.Forms.Label; $lblHeaderTitle.Text = "Dashboard"; $lblHeaderTitle.Font = $fontHead; $lblHeaderTitle.ForeColor = $colTextWhite; $lblHeaderTitle.AutoSize = $true; $pnlHeader.Controls.Add($lblHeaderTitle)
+    $splitMain.Panel2.Controls.Add($pnlHeader)
+
+    $pnlActions = New-Object System.Windows.Forms.FlowLayoutPanel; $pnlActions.Dock = "Bottom"; $pnlActions.Height = 60; $pnlActions.BackColor = $colDarkBg; $pnlActions.FlowDirection = "LeftToRight"; $splitMain.Panel2.Controls.Add($pnlActions)
+    
+    $flowMaint = New-Object System.Windows.Forms.FlowLayoutPanel; $flowMaint.Dock = "Fill"; $flowMaint.AutoScroll = $true; $flowMaint.Visible = $false; $flowMaint.Padding = New-Object System.Windows.Forms.Padding(20)
+    $flowTools = New-Object System.Windows.Forms.FlowLayoutPanel; $flowTools.Dock = "Fill"; $flowTools.AutoScroll = $true; $flowTools.Visible = $false; $flowTools.Padding = New-Object System.Windows.Forms.Padding(20)
+    $pnlWU = New-Object System.Windows.Forms.Panel; $pnlWU.Dock = "Fill"; $pnlWU.Visible = $false
+    
+    # Windows Update UI
+    $grpStatus = New-Object System.Windows.Forms.GroupBox; $grpStatus.Text = "Update Status"; $grpStatus.ForeColor = $colTextWhite; $grpStatus.Dock = "Top"; $grpStatus.Height = 100; $grpStatus.Font = $fontBold; $pnlWU.Controls.Add($grpStatus)
+    $lblCurMode = New-Object System.Windows.Forms.Label; $lblCurMode.Text = "Mode: Checking..."; $lblCurMode.Location = "20,30"; $lblCurMode.AutoSize = $true; $lblCurMode.Font = $fontStd; $grpStatus.Controls.Add($lblCurMode)
+    $grpOpts = New-Object System.Windows.Forms.GroupBox; $grpOpts.Text = "Configuration"; $grpOpts.ForeColor = $colTextWhite; $grpOpts.Dock = "Fill"; $grpOpts.Font = $fontBold; $pnlWU.Controls.Add($grpOpts); $grpOpts.BringToFront()
+    $rbDef = New-Object System.Windows.Forms.RadioButton; $rbDef.Text = "Default Settings (Enable All)"; $rbDef.Location = "20,40"; $rbDef.AutoSize = $true; $rbDef.ForeColor = $colTextWhite; $grpOpts.Controls.Add($rbDef)
+    $rbSec = New-Object System.Windows.Forms.RadioButton; $rbSec.Text = "Security Only (Defer Features 1 Year)"; $rbSec.Location = "20,80"; $rbSec.AutoSize = $true; $rbSec.ForeColor = $colTextWhite; $grpOpts.Controls.Add($rbSec)
+    $rbDis = New-Object System.Windows.Forms.RadioButton; $rbDis.Text = "Disable Updates (Not Recommended)"; $rbDis.Location = "20,120"; $rbDis.AutoSize = $true; $rbDis.ForeColor = [System.Drawing.Color]::Salmon; $grpOpts.Controls.Add($rbDis)
+    
+    # Install Apps UI
+    $pnlPackageManager = New-Object System.Windows.Forms.Panel; $pnlPackageManager.Height = 40; $pnlPackageManager.Dock = "Top"; $pnlPackageManager.BackColor = $colPanelBg; $pnlPackageManager.Padding = New-Object System.Windows.Forms.Padding(10, 5, 10, 5); $pnlPackageManager.Visible = $false
+    $lblPackageManager = New-Object System.Windows.Forms.Label; $lblPackageManager.Text = "Package Manager:"; $lblPackageManager.AutoSize = $true; $lblPackageManager.ForeColor = $colTextWhite; $lblPackageManager.Location = "10, 10"; $pnlPackageManager.Controls.Add($lblPackageManager)
+    $rbWinget = New-Object System.Windows.Forms.RadioButton; $rbWinget.Text = "Winget"; $rbWinget.AutoSize = $true; $rbWinget.Checked = ($sync.PackageManager -eq "winget"); $rbWinget.ForeColor = $colTextWhite; $rbWinget.Location = "120, 10"
+    $rbWinget.Add_CheckedChanged({ if ($this.Checked) { $sync.PackageManager = "winget"; Start-BackgroundTask "CheckInstalled" $null } }); $pnlPackageManager.Controls.Add($rbWinget)
+    $rbChocolatey = New-Object System.Windows.Forms.RadioButton; $rbChocolatey.Text = "Chocolatey"; $rbChocolatey.AutoSize = $true; $rbChocolatey.Checked = ($sync.PackageManager -eq "chocolatey"); $rbChocolatey.ForeColor = $colTextWhite; $rbChocolatey.Location = "200, 10"
+    $rbChocolatey.Add_CheckedChanged({ if ($this.Checked) { $sync.PackageManager = "chocolatey"; Start-BackgroundTask "CheckInstalled" $null } }); $pnlPackageManager.Controls.Add($rbChocolatey)
+    
+    $pnlSearch = New-Object System.Windows.Forms.Panel; $pnlSearch.Height = 50; $pnlSearch.Dock = "Top"; $pnlSearch.BackColor = $colPanelBg; $pnlSearch.Padding = New-Object System.Windows.Forms.Padding(20, 10, 20, 10); $pnlSearch.Visible = $false
+    $txtSearch = New-Object System.Windows.Forms.TextBox; $txtSearch.Location = "20, 15"; $txtSearch.Size = "300, 25"; $txtSearch.Font = $fontStd; $txtSearch.ForeColor = $colTextGray; $txtSearch.BackColor = $colDarkBg; $txtSearch.BorderStyle = "FixedSingle"; $txtSearch.Text = "Search software..."
+    $txtSearch.Add_Enter({ if ($this.Text -eq "Search software...") { $this.Text = ""; $this.ForeColor = $colTextWhite } })
+    $txtSearch.Add_Leave({ if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = "Search software..."; $this.ForeColor = $colTextGray } })
+    $txtSearch.Add_TextChanged({ if ($this.Text -ne "Search software...") { $sync.SoftwareSearchText = $this.Text } else { $sync.SoftwareSearchText = "" }; Update-ListView "Installs" })
+    $pnlSearch.Controls.Add($txtSearch)
+    
+    function Start-BackgroundTask {
+        param($Action, $Payload)
+        if ($sync.IsBusy) { Write-Host "[WARN] System is busy. Ignoring Action: $Action" -ForegroundColor Yellow; return }
+        Write-Host "[TASK] Starting: $Action" -NoNewline -ForegroundColor Cyan; if ($Payload) { Write-Host " | Target: $Payload" -ForegroundColor Gray } else { Write-Host "" }
+        $sync.IsBusy = $true; $lblStatus.Text = "Processing $Action..."; $pnlActions.Enabled = $false
+        # ProgressBar logic REMOVED here
+        $ps = [powershell]::Create(); $ps.RunspacePool = $sync.RunspacePool; [void]$ps.AddScript($workerScript).AddArgument($sync).AddArgument($Action).AddArgument($Payload)
+        $handle = $ps.BeginInvoke(); $uiTimer.Tag = @{ Handle=$handle; Shell=$ps; Action=$Action }; $uiTimer.Start()
+    }
+
+    $uiTimer.Add_Tick({
+        $state = $uiTimer.Tag
+        if ($state -and $state.Handle.IsCompleted) {
+            $uiTimer.Stop(); $ps = $state.Shell
+            try { $ps.EndInvoke($state.Handle); $ps.Dispose() } catch { Write-Host "[ERROR] Exception: $($_.Exception.Message)" -ForegroundColor Red }
+            if ($sync.Result -eq "Error") { Write-Host "[FAIL] Task Failed: $($state.Action)" -ForegroundColor Red; [System.Windows.Forms.MessageBox]::Show($sync.ErrorMessage, "Error", "OK", "Error") } 
+            else { Write-Host "[DONE] Task Completed: $($state.Action)" -ForegroundColor Green }
+
+            # Queue Processing
+            foreach ($qItem in $sync.ActionQueue) {
+                if ($qItem -eq "CheckInstalled" -and $script:currentView -eq "Installs") { Update-ListView "Installs" }
+                if ($qItem -eq "CheckTweaks" -and $script:currentView -eq "Tweaks") { Update-ListView "Tweaks" }
+                if ($qItem -eq "LoadPower") { Update-ListView "Power" }
+            }
+            $sync.ActionQueue = @()
+
+            # Single Action Updates
+            if ($state.Action -eq "CheckTweaks" -and $script:currentView -eq "Tweaks") { Update-ListView "Tweaks" }
+            if ($state.Action -eq "CheckInstalled" -and $script:currentView -eq "Installs") { Update-ListView "Installs" }
+            if ($state.Action -eq "LoadPower" -and $script:currentView -eq "Power") { Update-ListView "Power" }
+            if ($state.Action -eq "WU_GetStatus") { $lblCurMode.Text = "Current Status: " + $sync.WUStatus }
+            
+            $sync.IsBusy = $false; $lblStatus.Text = "Ready"; $pnlActions.Enabled = $true
+            # ProgressBar logic REMOVED here
+        }
+    })
+
+    function New-DataList($ColsOrdered, $CheckBoxes) {
+        $lv = New-Object System.Windows.Forms.ListView
+        $lv.Dock = "Fill"; $lv.View = "Details"; $lv.FullRowSelect = $true; $lv.GridLines = $false; $lv.HeaderStyle = "Nonclickable"; $lv.CheckBoxes = $CheckBoxes; 
+        # Note: AllowColumnReorder affects user dragging columns to new positions, not resizing.
+        $lv.AllowColumnReorder = $false
+        $lv.BackColor = $colPanelBg; $lv.ForeColor = $colTextGray; $lv.BorderStyle = "None"; $lv.Font = $fontStd; $lv.OwnerDraw = $true; $lv.Visible = $false
+        
+        # --- STORE WIDTHS IN TAG FOR LOCKING ---
+        $lv.Tag = @{ 
+            HeaderBrush = [System.Drawing.SolidBrush]::new($colDarkBg); 
+            TextBrush = [System.Drawing.SolidBrush]::new($colTextWhite); 
+            SelBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(60,60,70)); 
+            BgBrush = [System.Drawing.SolidBrush]::new($colPanelBg); 
+            BorderPen = [System.Drawing.Pen]::new($colBorder, 1);
+            ColumnWidths = @{} # Store authorized widths
+        }
+
+        # Add columns and populate widths
+        $i = 0
+        foreach ($k in $ColsOrdered.Keys) { 
+            $w = $ColsOrdered[$k]
+            $lv.Columns.Add($k, $w) | Out-Null 
+            $lv.Tag.ColumnWidths[$i] = $w
+            $i++
+        }
+
+        # --- STRICT LOCKING & VISUAL FIX ---
+        
+        # 1. Prevent Resizing (Lock)
+        $lv.Add_ColumnWidthChanging({ 
+            param($sender, $e)
+            $e.Cancel = $true
+            # Force back to stored width immediately to prevent visual jitter
+            $e.NewWidth = $sender.Tag.ColumnWidths[$e.ColumnIndex]
+        })
+
+        # 2. Fill Empty Space (Fix White Header Bug)
+        $lv.Add_Resize({ 
+            param($sender, $e)
+            if ($sender.Columns.Count -gt 0) {
+                $totalW = 0
+                # Sum all columns except the last one
+                for($j=0; $j -lt $sender.Columns.Count - 1; $j++) {
+                    $totalW += $sender.Columns[$j].Width
+                }
+                # Calculate remaining width
+                $newLastW = $sender.ClientRectangle.Width - $totalW
+                # Apply to last column if valid
+                if ($newLastW -gt 50) {
+                    $lastIdx = $sender.Columns.Count - 1
+                    $sender.Columns[$lastIdx].Width = $newLastW
+                    # IMPORTANT: Update the "locked" width so the locking event accepts the new size
+                    $sender.Tag.ColumnWidths[$lastIdx] = $newLastW
+                }
+            }
+        })
+
+        $lv.Add_DrawColumnHeader({ param($s,$e) $e.Graphics.FillRectangle($s.Tag.HeaderBrush, $e.Bounds); $sf = [System.Drawing.StringFormat]::new(); $sf.LineAlignment = "Center"; $rectF = [System.Drawing.RectangleF]::new($e.Bounds.X, $e.Bounds.Y, $e.Bounds.Width, $e.Bounds.Height); $e.Graphics.DrawString($e.Header.Text, $fontBold, $s.Tag.TextBrush, $rectF, $sf) })
+        $lv.Add_DrawItem({ param($s,$e) $e.DrawDefault = $true })
+        $lv.Add_DrawSubItem({ 
+            param($s,$e) 
+            $color = $colTextGray
+            if ($e.ColumnIndex -eq 0) { if (($sync.InstalledApps -contains $e.Item.Tag) -or ($sync.AppliedTweaks -contains $e.Item.Tag)) { $color = [System.Drawing.Color]::LightGreen } else { $color = $colTextWhite } }
+            elseif ($e.ColumnIndex -ge 1) { if ($e.SubItem.Text -match "Active" -or $e.SubItem.Text -match "Enabled" -or $e.SubItem.Text -eq "Installed") { $color = [System.Drawing.Color]::LightGreen } elseif ($e.SubItem.Text -match "Inactive" -or $e.SubItem.Text -match "Disabled" -or $e.SubItem.Text -eq "Not Installed") { $color = [System.Drawing.Color]::Gray } } 
+            if ($e.Item.Selected) { $e.Graphics.FillRectangle($s.Tag.SelBrush, $e.Bounds); $color = $colTextWhite } else { $e.Graphics.FillRectangle($s.Tag.BgBrush, $e.Bounds) }
+            $sf = [System.Drawing.StringFormat]::new(); $sf.LineAlignment = "Center"; $sf.Trimming = "EllipsisCharacter"; $x = $e.Bounds.X; if ($e.ColumnIndex -eq 0 -and $s.CheckBoxes) { $x += 22 } else { $x += 5 }
+            $brush = [System.Drawing.SolidBrush]::new($color); $rectF = [System.Drawing.RectangleF]::new($x, $e.Bounds.Y, $e.Bounds.Width, $e.Bounds.Height); $e.Graphics.DrawString($e.SubItem.Text, $fontStd, $brush, $rectF, $sf); $brush.Dispose(); $e.Graphics.DrawLine($s.Tag.BorderPen, $e.Bounds.Left, $e.Bounds.Bottom - 1, $e.Bounds.Right, $e.Bounds.Bottom - 1)
+        })
+        return $lv
+    }
+
+    $lvPower    = New-DataList ([ordered]@{ "Plan Name"=500; "Status"=120; "GUID"=200 }) $false
+    $lvTweaks   = New-DataList ([ordered]@{ "Tweak Name"=300; "Status"=100; "Category"=150; "Description"=500 }) $true
+    $lvInstalls = New-DataList ([ordered]@{ "Software Name"=300; "Status"=120; "Category"=150; "Description"=500 }) $true 
+
+    $pnlListContainer = New-Object System.Windows.Forms.Panel; $pnlListContainer.Dock = "Fill"; $pnlListContainer.Padding = New-Object System.Windows.Forms.Padding(20, 20, 20, 0); $pnlListContainer.BackColor = $colDarkBg
+    $pnlListContainer.Controls.Add($lvPower); $pnlListContainer.Controls.Add($lvTweaks); $pnlListContainer.Controls.Add($lvInstalls); $pnlListContainer.Controls.Add($flowMaint); $pnlListContainer.Controls.Add($flowTools); $pnlListContainer.Controls.Add($pnlWU); $pnlListContainer.Controls.Add($pnlPackageManager); $pnlListContainer.Controls.Add($pnlSearch)
+    $splitMain.Panel2.Controls.Add($pnlListContainer); $pnlListContainer.BringToFront()
+
+    function Update-ListView($Type) {
+        if ($Type -eq "Power") {
+            $lvPower.BeginUpdate(); $lvPower.Items.Clear()
+            foreach ($p in $sync.PowerPlans) { $item = $lvPower.Items.Add($p.Name); $item.SubItems.Add($p.Status) | Out-Null; $item.SubItems.Add($p.Guid) | Out-Null; $item.Tag = $p.Guid; if ($p.Status -eq "Active") { $item.SubItems[1].ForeColor = $colAccentGreen } }
+            $lvPower.EndUpdate()
+        } elseif ($Type -eq "Tweaks") {
+            $lvTweaks.BeginUpdate(); $lvTweaks.Items.Clear()
+            foreach ($t in $sync.Tweaks) { $item = $lvTweaks.Items.Add($t.Name); if ($sync.AppliedTweaks -contains $t.Id) { $item.SubItems.Add("Active") | Out-Null; $item.ForeColor = $colAccentGreen } else { $item.SubItems.Add("Inactive") | Out-Null }; $item.SubItems.Add($t.Category) | Out-Null; $item.SubItems.Add($t.Description) | Out-Null; $item.Tag = $t.Id }
+            $lvTweaks.EndUpdate()
+        } elseif ($Type -eq "Installs") {
+            $lvInstalls.BeginUpdate(); $lvInstalls.Items.Clear()
+            $filteredSoftware = $sync.Software
+            if ($sync.SoftwareSearchText -and $sync.SoftwareSearchText.Trim() -ne "") { $searchText = $sync.SoftwareSearchText.ToLower(); $filteredSoftware = $sync.Software | Where-Object { $_.Name.ToLower().Contains($searchText) -or $_.Category.ToLower().Contains($searchText) } }
+            foreach ($s in $filteredSoftware) { 
+                $item = $lvInstalls.Items.Add($s.Name)
+                if ($sync.InstalledApps -contains $s.Id) { $item.SubItems.Add("Installed") | Out-Null; $item.ForeColor = $colAccentGreen } 
+                else { $item.SubItems.Add("Not Installed") | Out-Null }
+                $item.SubItems.Add($s.Category) | Out-Null; $item.SubItems.Add($s.Description) | Out-Null; $item.Tag = $s.Id 
+            }
+            $lvInstalls.EndUpdate()
+        }
+    }
+
+    # Minimalist Button: Neutral BG, Colored Text, Colored Border
+    function New-ActionButton($Text, $Color, $ActionScript) { 
+        $btn = New-Object System.Windows.Forms.Button
+        $btn.Text = $Text
+        $btn.BackColor = $colBtnSurface
+        $btn.ForeColor = $Color
+        $btn.FlatStyle = "Flat"
+        $btn.FlatAppearance.BorderSize = 1
+        $btn.FlatAppearance.BorderColor = $Color
+        $btn.Size = New-Object System.Drawing.Size(140, 35)
+        $btn.Margin = New-Object System.Windows.Forms.Padding(0, 10, 10, 0)
+        $btn.Add_Click($ActionScript)
+        return $btn 
+    }
+    
+    function New-ActionButtonWithTooltip($Text, $Color, $ToolTipText, $ActionScript) { 
+        $btn = New-Object System.Windows.Forms.Button
+        $btn.Text = $Text
+        $btn.BackColor = $colBtnSurface
+        $btn.ForeColor = $Color
+        $btn.FlatStyle = "Flat"
+        $btn.FlatAppearance.BorderSize = 1
+        $btn.FlatAppearance.BorderColor = $Color
+        $btn.Size = New-Object System.Drawing.Size(140, 35)
+        $btn.Margin = New-Object System.Windows.Forms.Padding(0, 10, 10, 0)
+        $tooltip = New-Object System.Windows.Forms.ToolTip
+        $tooltip.SetToolTip($btn, $ToolTipText)
+        $btn.Add_Click($ActionScript)
+        return $btn 
+    }
+
+    function New-MaintCard($Title, $Desc, $ActionId, $Color) {
+        $p = New-Object System.Windows.Forms.Panel; $p.Size = New-Object System.Drawing.Size(300, 150); $p.BackColor = $colPanelBg; $p.Margin = New-Object System.Windows.Forms.Padding(0, 0, 20, 20)
+        $l = New-Object System.Windows.Forms.Label; $l.Text = $Title; $l.Font = $fontBold; $l.ForeColor = $colTextWhite; $l.Location = "10,10"; $l.AutoSize = $true; $p.Controls.Add($l)
+        $d = New-Object System.Windows.Forms.Label; $d.Text = $Desc; $d.ForeColor = $colTextGray; $d.Location = "10,40"; $d.Size = "280, 60"; $p.Controls.Add($d)
+        
+        $b = New-Object System.Windows.Forms.Button; $b.Text = "Run"
+        # Minimalist "Ghost" Button Style
+        $b.BackColor = $colBtnSurface; $b.ForeColor = $Color; $b.FlatStyle = "Flat"; $b.FlatAppearance.BorderSize = 1; $b.FlatAppearance.BorderColor = $Color
+        $b.Location = "10, 105"; $b.Tag = $ActionId
+        $b.Add_Click({ $tag = $this.Tag; if ($tag -match "^DirectRun:(.+)$") { $cmd = $matches[1]; $args=$null; if ($cmd -match "^(\S+)\s+(.+)$") { $cmd=$matches[1]; $args=$matches[2] }; if ($args) { Start-Process $cmd $args } else { Start-Process $cmd } } else { $parts=$tag-split":",2; if($parts.Count-eq2){Start-BackgroundTask $parts[0] $parts[1]}else{Start-BackgroundTask $tag $null} } })
+        $p.Controls.Add($b); return $p
+    }
+
+    # Maintenance Cards
+    $flowMaint.Controls.Add((New-MaintCard "DNS: Google" "Set DNS to 8.8.8.8 & IPv6." "SetDNS:Google" $colAccentCyan))
+    $flowMaint.Controls.Add((New-MaintCard "DNS: Cloudflare" "Set DNS to 1.1.1.1 & IPv6." "SetDNS:Cloudflare" $colAccentCyan))
+    $flowMaint.Controls.Add((New-MaintCard "DNS: DHCP" "Reset DNS to automatic." "SetDNS:DHCP" $colAccentCyan))
+    $flowMaint.Controls.Add((New-MaintCard "Update Repair" "Reset WU components." "Maint_ResetUpdates" $colAccentRed))
+    $flowMaint.Controls.Add((New-MaintCard "System Scan" "Chkdsk -> SFC -> DISM -> SFC." "Maint_SystemScan" $colAccentRed))
+    $flowMaint.Controls.Add((New-MaintCard "Deep Cleanup" "Disk Cleanup + Component Store." "Maint_Cleanup" $colAccentBlue))
+    $flowMaint.Controls.Add((New-MaintCard "Network Reset" "Flush DNS, Reset IP/Winsock." "Maint_Network" $colAccentRed))
+    $flowMaint.Controls.Add((New-MaintCard "Reinstall Package Manager" "Reinstall Winget/Choco." "Maint_ReinstallPackageManager" $colAccentPurple))
+    $flowMaint.Controls.Add((New-MaintCard "Remove OneDrive" "Uninstall OneDrive." "Maint_RemoveOneDrive" $colAccentRed))
+    $flowMaint.Controls.Add((New-MaintCard "O&O ShutUp10" "Run O&O ShutUp10." "Maint_OOSU10" $colAccentBlue))
+    $flowMaint.Controls.Add((New-MaintCard "Enable SSH Server" "Install OpenSSH Server." "Maint_EnableSSH" $colAccentGreen))
+    $flowMaint.Controls.Add((New-MaintCard "Run Adobe Cleaner" "Run Adobe CC Cleaner Tool." "Maint_AdobeClean" $colAccentOrange))
+    $flowMaint.Controls.Add((New-MaintCard "Sysinternals Autoruns" "Run Autoruns." "Maint_Autoruns" $colAccentBlue))
+
+    # Tools Cards
+    $flowTools.Controls.Add((New-MaintCard "Control Panel" "Open Legacy Control Panel." "DirectRun:control" $colAccentGray))
+    $flowTools.Controls.Add((New-MaintCard "Network Connections" "Open Network Adapter settings." "DirectRun:explorer ncpa.cpl" $colAccentGray))
+    $flowTools.Controls.Add((New-MaintCard "Power Options" "Open Power Options." "DirectRun:explorer powercfg.cpl" $colAccentGray))
+    $flowTools.Controls.Add((New-MaintCard "Sound Settings" "Open Sound settings." "DirectRun:explorer mmsys.cpl" $colAccentGray))
+    $flowTools.Controls.Add((New-MaintCard "System Properties" "Open System Properties." "DirectRun:explorer sysdm.cpl" $colAccentGray))
+    $flowTools.Controls.Add((New-MaintCard "User Accounts" "Open User Accounts." "DirectRun:netplwiz" $colAccentGray))
+    $flowTools.Controls.Add((New-MaintCard "Registry Editor" "Open Registry Editor." "DirectRun:regedit" $colAccentGray))
+    $flowTools.Controls.Add((New-MaintCard "Services" "Open Services." "DirectRun:mmc services.msc" $colAccentGray))
+    $flowTools.Controls.Add((New-MaintCard "God Mode" "Open God Mode." "DirectRun:explorer shell:::{ED7BA470-8E54-465E-825C-99712043E01C}" $colAccentGray))
+    $flowTools.Controls.Add((New-MaintCard "Task Manager" "Manage running processes." "DirectRun:taskmgr" $colAccentGray))
+    $flowTools.Controls.Add((New-MaintCard "Restart Explorer" "Reload shell (Fix glitches)." "RestartExplorer" $colAccentGray))
+
+    $script:currentView = $null
+    function Set-View($View) {
+        $script:currentView = $View
+        $lvPower.Visible = $false; $lvTweaks.Visible = $false; $lvInstalls.Visible = $false; $flowMaint.Visible = $false; $flowTools.Visible = $false; $pnlWU.Visible = $false; $pnlPackageManager.Visible = $false; $pnlSearch.Visible = $false; $pnlActions.Controls.Clear()
+        foreach ($key in $sync.MenuButtons.Keys) { $btn = $sync.MenuButtons[$key]; if ($key -eq $View) { $btn.BackColor = $colPanelBg; $btn.ForeColor = $colTextWhite; $btn.FlatAppearance.BorderSize = 4; $btn.FlatAppearance.BorderColor = $sync.ViewColors[$key] } else { $btn.BackColor = $colSideBar; $btn.ForeColor = $colTextGray; $btn.FlatAppearance.BorderSize = 0 } }
+        
+        switch ($View) {
+            "Power" { 
+                $lblHeaderTitle.Text = "Power Plans"; $lblHeaderTitle.ForeColor = $colAccentRed
+                $lvPower.Visible = $true
+                $pnlActions.Controls.Add((New-ActionButton "Set Active" $colAccentGreen { if ($lvPower.SelectedItems.Count -gt 0) { Start-BackgroundTask "SetPower" $lvPower.SelectedItems[0].Tag } }))
+                $pnlActions.Controls.Add((New-ActionButton "Refresh List" $colAccentBlue { Start-BackgroundTask "LoadPower" $null }))
+                Start-BackgroundTask "LoadPower" $null 
+            }
+            "Tweaks" { 
+                $lblHeaderTitle.Text = "System Tweaks"; $lblHeaderTitle.ForeColor = $colAccentPurple
+                $lvTweaks.Visible = $true
+                $pnlActions.Controls.Add((New-ActionButton "Create Restore Point" $colAccentCyan { Start-BackgroundTask "CreateRestorePoint" $null }))
+                $pnlActions.Controls.Add((New-ActionButton "Apply Selected" $colAccentGreen { $selected = @(); foreach ($item in $lvTweaks.CheckedItems) { $selected += $item.Tag }; if ($selected.Count -gt 0) { Start-BackgroundTask "ApplyTweakBatch" $selected } }))
+                $pnlActions.Controls.Add((New-ActionButton "Undo Selected" $colAccentRed { $selected = @(); foreach ($item in $lvTweaks.CheckedItems) { $selected += $item.Tag }; if ($selected.Count -gt 0) { Start-BackgroundTask "UndoTweakBatch" $selected } }))
+                $pnlActions.Controls.Add((New-ActionButton "Refresh Status" $colAccentBlue { Start-BackgroundTask "CheckTweaks" $null }))
+                Start-BackgroundTask "CheckTweaks" $null 
+            }
+            "Installs" { 
+                $lblHeaderTitle.Text = "Software Installer"; $lblHeaderTitle.ForeColor = $colAccentGreen
+                $lvInstalls.Visible = $true; $pnlPackageManager.Visible = $true; $pnlSearch.Visible = $true
+                
+                # Install Button
+                $pnlActions.Controls.Add((New-ActionButton "Install Selected" $colAccentGreen { 
+                    $selected = @(); foreach ($item in $lvInstalls.CheckedItems) { $selected += $item.Tag }
+                    if ($selected.Count -gt 0) { $selected | ForEach-Object { Start-BackgroundTask "InstallApp" $_ } } 
+                }))
+                
+                # Update Button
+                $pnlActions.Controls.Add((New-ActionButton "Update Selected" $colAccentBlue { 
+                    $selected = @(); foreach ($item in $lvInstalls.CheckedItems) { $selected += $item.Tag }
+                    if ($selected.Count -gt 0) { $selected | ForEach-Object { Start-BackgroundTask "UpgradeApp" $_ } } 
+                }))
+
+                # Delete (Uninstall) Button
+                $pnlActions.Controls.Add((New-ActionButton "Delete Selected" $colAccentRed { 
+                    $selected = @(); foreach ($item in $lvInstalls.CheckedItems) { $selected += $item.Tag }
+                    if ($selected.Count -gt 0) { $selected | ForEach-Object { Start-BackgroundTask "UninstallApp" $_ } } 
+                }))
+                
+                # Refresh Button
+                $pnlActions.Controls.Add((New-ActionButton "Refresh List" $colAccentBlue { 
+                    Start-BackgroundTask "CheckInstalled" $null 
+                }))
+
+                # Perdanger's Preset Button
+                $presetIds = @("Brave.Brave", "Anysphere.Cursor", "Discord.Discord", "AdrienAllard.FileConverter", "Git.Git", "DuongDieuPhap.ImageGlass", "Nvidia.NvidiaApp", "qBittorrent.qBittorrent", "RevoUninstaller.RevoUninstaller", "Spotify.Spotify", "Valve.Steam", "Telegram.TelegramDesktop", "VideoLAN.VLC", "RARLab.WinRAR", "AntibodySoftware.WizTree")
+                $tooltipText = "Installs Perdanger's Preset:`n- Brave`n- Cursor IDE`n- Discord`n- File Converter`n- Git`n- ImageGlass`n- Nvidia App`n- qBittorrent`n- Revo Uninstaller`n- Spotify`n- Steam`n- Telegram`n- VLC`n- WinRAR`n- WizTree"
+                $pnlActions.Controls.Add((New-ActionButtonWithTooltip "Perdanger's Preset" $colAccentPurple $tooltipText { 
+                    $presetIds | ForEach-Object { Start-BackgroundTask "InstallApp" $_ } 
+                }))
+
+                if ($sync.InstalledApps.Count -eq 0) { Start-BackgroundTask "CheckInstalled" $null } else { Update-ListView "Installs" } 
+            }
+            "Maintenance" { 
+                $lblHeaderTitle.Text = "System Maintenance"; $lblHeaderTitle.ForeColor = $colAccentOrange
+                $flowMaint.Visible = $true 
+            }
+            "Tools" { 
+                $lblHeaderTitle.Text = "Quick Tools"; $lblHeaderTitle.ForeColor = $colAccentGray
+                $flowTools.Visible = $true 
+            }
+            "WindowsUpdate" { 
+                $lblHeaderTitle.Text = "Windows Update Config"; $lblHeaderTitle.ForeColor = $colAccentBlue
+                $pnlWU.Visible = $true
+                Start-BackgroundTask "WU_GetStatus" $null
+                $pnlActions.Controls.Add((New-ActionButton "Apply Settings" $colAccentGreen { $action = "WU_SetDefault"; if ($rbSec.Checked) { $action = "WU_SetSecurity" } elseif ($rbDis.Checked) { $action = "WU_SetDisabled" }; Start-BackgroundTask $action $null }))
+                $pnlActions.Controls.Add((New-ActionButton "Refresh Status" $colAccentBlue { Start-BackgroundTask "WU_GetStatus" $null })) 
+            }
+        }
+    }
+
+    $form.Add_FormClosing({ Write-Host "[STOP] Shutting down System Manager..." -ForegroundColor Cyan; $sync.RunspacePool.Close(); $sync.RunspacePool.Dispose() })
+    Set-View "Tweaks"
+    [System.Windows.Forms.Application]::Run($form)
 }
 
 # ENHANCED FUNCTION: Create a detailed autounattend.xml file via GUI with regional settings and tooltips.
@@ -3394,7 +4379,7 @@ function Show-Menu {
     $menuLines.Add($pssUnderline)
     $menuLines.Add($centeredPssTextLine)
     $menuLines.Add($dashedLine)
-    $menuLines.Add(" Windows & Software Manager [PSS v1.6] ($(Get-Date -Format "dd.MM.yyyy HH:mm"))") 
+    $menuLines.Add(" Windows & Software Manager [PSS v1.7] ($(Get-Date -Format "dd.MM.yyyy HH:mm"))") 
     $menuLines.Add(" Log saved to: $(Split-Path -Leaf $script:logFile)")
     $menuLines.Add(" $($script:sortedPrograms.Count) programs available for installation")
     $menuLines.Add($pssUnderline)
@@ -3453,11 +4438,10 @@ function Show-Menu {
 $optionPairs = @(
     @{ Left = "[A] Install All Programs";              Right = "[W] Activate Windows" },
     @{ Left = "[G] Select Specific Programs [GUI]";    Right = "[N] Update Windows" },
-    @{ Left = "[U] Uninstall Programs [GUI]";          Right = "[T] Disable Windows Telemetry" },
-    @{ Left = "[C] Install Custom Program";            Right = "[S] System Cleanup [GUI]" },
-    @{ Left = "[X] Activate Spotify";                  Right = "[F] Create Unattend.xml File [GUI]" },
-    @{ Left = "[P] Import & Install from File";        Right = "[I] Show System Information" },
-    @{ Left = "";                                      Right = "[R] System Repair" } 
+    @{ Left = "[U] Uninstall Programs [GUI]";          Right = "[S] System Cleanup [GUI]" },
+    @{ Left = "[C] Install Custom Program";            Right = "[F] Create Unattend.xml File [GUI]" },
+    @{ Left = "[X] Activate Spotify";                  Right = "[I] Show System Information" },
+    @{ Left = "[P] Import & Install from File";        Right = "[P] Perdanga System Manager" }                                     
 )
 
     $column1Width = ($optionPairs.Left | Measure-Object -Property Length -Maximum).Maximum + 5
@@ -3575,7 +4559,7 @@ $programs = @(
 # --- SCRIPT-WIDE VARIABLES ---
 $script:sortedPrograms = $programs | Sort-Object
 # In PART 3: CONFIGURATION
-$script:mainMenuLetters = @('a', 'c', 'e', 'f', 'g', 'i', 'n', 'p', 'r', 's', 't', 'u', 'w', 'x') 
+$script:mainMenuLetters = @('a', 'c', 'e', 'f', 'g', 'i', 'n', 'p', 'r', 's', 't', 'u', 'w', 'x', 'l') 
 $script:mainMenuRegexPattern = "^(perdanga|" + ($script:mainMenuLetters -join '|') + "|[0-9,\s]+)$"
 $script:availableProgramNumbers = 1..($script:sortedPrograms.Count) | ForEach-Object { $_.ToString() }
 $script:programToNumberMap = @{}
@@ -3824,8 +4808,9 @@ do {
             'f' { Clear-Host; Create-UnattendXml }
             's' { Clear-Host; Invoke-TempFileCleanup }
             'i' { Clear-Host; Show-SystemInfo }
-            'p' { Clear-Host; Import-ProgramSelection }
+            'l' { Clear-Host; Import-ProgramSelection }
             'r' { Clear-Host; Invoke-SystemRepair }
+            'p' { Clear-Host; Invoke-PerdangaSystemManager }
         }
     }
     elseif ($userInput -match '[, ]+') {
