@@ -68,7 +68,7 @@ Efficient Windows Management for Software, Tweaks, Power, Updates.
   - Remove OneDrive.
   - Run external tools: O&O ShutUp10, Sysinternals Autoruns, Adobe CC Cleaner.
   - Enable SSH Server.
-- **Windows Update Config**: Manage update policies:
+- **Windows Update Config**:
   - Default (Enabled).
   - Security Only (Defer features for 1 year).
   - Disabled.
