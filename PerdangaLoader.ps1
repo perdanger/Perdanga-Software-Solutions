@@ -1897,11 +1897,10 @@ function Invoke-PerdangaSystemManager {
         A comprehensive GUI-based manager for Power Plans, System Tweaks, Maintenance, Software, and Windows Update.
     .DESCRIPTION
         VERSION 6.0 (Updated):
-        - NEW: Dashboard with real-time System Info (CPU, RAM, GPU, Uptime).
+        - NEW: Dashboard with real-time System Info.
         - NEW: Search functionality enabled for Tweaks tab.
         - NEW: "Select All" / "Deselect All" buttons for bulk operations.
         - NEW: Action Log viewer.
-        - PRESERVED: All original tweaks, software lists, and logic.
     #>
     
     # --- 1. PREREQUISITES CHECK ---
@@ -2856,8 +2855,10 @@ function Invoke-PerdangaSystemManager {
 
     $pnlActions = New-Object System.Windows.Forms.FlowLayoutPanel; $pnlActions.Dock = "Bottom"; $pnlActions.Height = 80; $pnlActions.BackColor = $colDarkBg; $pnlActions.FlowDirection = "LeftToRight"; $pnlActions.AutoScroll = $true; $splitMain.Panel2.Controls.Add($pnlActions)
     
-    $flowMaint = New-Object System.Windows.Forms.FlowLayoutPanel; $flowMaint.Dock = "Fill"; $flowMaint.AutoScroll = $true; $flowMaint.Visible = $false; $flowMaint.Padding = New-Object System.Windows.Forms.Padding(20)
-    $flowTools = New-Object System.Windows.Forms.FlowLayoutPanel; $flowTools.Dock = "Fill"; $flowTools.AutoScroll = $true; $flowTools.Visible = $false; $flowTools.Padding = New-Object System.Windows.Forms.Padding(20)
+    # MODIFIED: Added bottom padding (100) to ensure last items are fully visible and scrollable
+    $flowMaint = New-Object System.Windows.Forms.FlowLayoutPanel; $flowMaint.Dock = "Fill"; $flowMaint.AutoScroll = $true; $flowMaint.Visible = $false; $flowMaint.Padding = New-Object System.Windows.Forms.Padding(20, 20, 20, 100)
+    $flowTools = New-Object System.Windows.Forms.FlowLayoutPanel; $flowTools.Dock = "Fill"; $flowTools.AutoScroll = $true; $flowTools.Visible = $false; $flowTools.Padding = New-Object System.Windows.Forms.Padding(20, 20, 20, 100)
+    
     $pnlWU = New-Object System.Windows.Forms.Panel; $pnlWU.Dock = "Fill"; $pnlWU.Visible = $false
     
     # Dashboard Panel (NEW)
@@ -3031,8 +3032,22 @@ function Invoke-PerdangaSystemManager {
     $splitMain.Panel2.Controls.Add($pnlListContainer); 
     
     # FIX: Ensure actions panel is visible at bottom by updating Z-Order
-    $pnlListContainer.BringToFront()
-    $pnlActions.BringToFront() 
+    # IMPORTANT FIX: Swapped logic here. Actions must be docked FIRST (so they reserve space).
+    # In WinForms, "SendToBack" puts a control at the START of the docking calculation (Lowest Priority / Highest Index).
+    # "BringToFront" puts a control at the END of the docking calculation (Highest Priority / Index 0).
+    # Wait - WinForms Docking is "Reverse Z-Order". The Highest Index (Back) is docked FIRST. The Lowest Index (Front) is docked LAST.
+    
+    # 1. Dock Actions FIRST (Bottom). It reserves 80px.
+    $pnlActions.BringToFront() # Set to Index 0 temporarily
+    
+    # 2. Dock Container LAST (Fill). It fills REMAINING space.
+    $pnlListContainer.BringToFront() # Now ListContainer is Index 0, Actions is Index 1.
+    
+    # Result: Index 1 (Actions) docked first. Index 0 (ListContainer) docked last.
+    
+    # Internal Fix: Ensure top panels (Search) are docked BEFORE lists.
+    $pnlSearch.SendToBack()
+    $pnlPackageManager.SendToBack()
 
     function Update-ListView($Type) {
         if ($Type -eq "Power") {
@@ -3139,6 +3154,9 @@ function Invoke-PerdangaSystemManager {
         $script:currentView = $View
         $lvPower.Visible = $false; $lvTweaks.Visible = $false; $lvInstalls.Visible = $false; $flowMaint.Visible = $false; $flowTools.Visible = $false; $pnlWU.Visible = $false; $pnlPackageManager.Visible = $false; $pnlSearch.Visible = $false; $pnlDashboard.Visible = $false; $pnlActions.Controls.Clear()
         
+        # MODIFIED: Ensure Action Panel is visible by default (hidden only in Maintenance/Tools to save space)
+        $pnlActions.Visible = $true
+
         # Reset Search on view change
         $txtSearch.Text = "Search..."
         $txtSearch.ForeColor = $colTextGray
@@ -3214,9 +3232,13 @@ function Invoke-PerdangaSystemManager {
             }
             "Maintenance" { 
                 $flowMaint.Visible = $true 
+                # MODIFIED: Hide action panel to reveal bottom buttons and gain screen space
+                $pnlActions.Visible = $false
             }
             "Tools" { 
                 $flowTools.Visible = $true 
+                # MODIFIED: Hide action panel to reveal bottom buttons and gain screen space
+                $pnlActions.Visible = $false
             }
             "WindowsUpdate" { 
                 $pnlWU.Visible = $true
@@ -5013,6 +5035,7 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
 
 
 
