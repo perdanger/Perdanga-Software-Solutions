@@ -161,5 +161,9 @@ This project incorporates code from the following third-party sources:
   - Copyright © 2025 massgravel
   - License: GPL-3.0
 
+##  🎉 Special thanks for testing
+  - Pavel Frugin
+  - Nikita Gutov
+
 ![Logo](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/PerdangaForeverLogo.png?raw=true)
 <p align="center"><b>⚡PERDANGA FOREVER⚡</b></p>
