@@ -2876,8 +2876,8 @@ function Invoke-PerdangaSystemManager {
 
     # --- NEW: Dashboard Image and Caption ---
     $pbDash = New-Object System.Windows.Forms.PictureBox
-    $pbDash.Location = "50, 220"
-    $pbDash.Size = "300, 270"
+    $pbDash.Location = "10, 220"
+    $pbDash.Size = "290, 260"
     $pbDash.SizeMode = "Zoom"
     # Using ImageLocation to allow asynchronous loading without freezing UI
     # Note: If link is a webpage and not direct image, it may fail silently or show X
@@ -5053,6 +5053,7 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
 
 
 
