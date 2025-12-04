@@ -162,7 +162,7 @@ This project incorporates code from the following third-party sources:
   - License: GPL-3.0
 
 ##  🎉 Special thanks for testing
-  - Pavel Frugin
+  - Pavel Frygin
   - Nikita Gutov
 
 ![Logo](https://github.com/perdanger/Perdanga-Software-Solutions/blob/main/PerdangaForeverLogo.png?raw=true)
