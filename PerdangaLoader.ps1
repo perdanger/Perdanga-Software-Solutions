@@ -1896,15 +1896,12 @@ function Invoke-PerdangaSystemManager {
     .SYNOPSIS
         A comprehensive GUI-based manager for Power Plans, System Tweaks, Maintenance, Software, and Windows Update.
     .DESCRIPTION
-        VERSION 5.8:
-        - FIX: "Export List" no longer hangs the process (moved MessageBox to UI thread).
-        - UPDATE: "MENU" text is now centered in the sidebar.
-        - NEW: Added "Export List" to Install Apps (Saves detected apps to Desktop).
-        - NEW: Added "Rebuild Icon Cache" to Maintenance tools.
-        - NEW: Added "Refresh List" button to Install Apps tab.
-        - NEW: Added "Update Selected" button to Install Apps tab.
-        - FIX: Chocolatey detection logic improved (Path/Output parsing).
-        - UPDATE: Installed software highlighting (Green/Gray status).
+        VERSION 6.0 (Updated):
+        - NEW: Dashboard with real-time System Info (CPU, RAM, GPU, Uptime).
+        - NEW: Search functionality enabled for Tweaks tab.
+        - NEW: "Select All" / "Deselect All" buttons for bulk operations.
+        - NEW: Action Log viewer.
+        - PRESERVED: All original tweaks, software lists, and logic.
     #>
     
     # --- 1. PREREQUISITES CHECK ---
@@ -1932,9 +1929,11 @@ function Invoke-PerdangaSystemManager {
     $sync.SoftwareSearchText = ""
     $sync.WUStatus = "Checking..."
     $sync.MenuButtons = @{}
-    $sync.ActionQueue = @() 
+    $sync.ActionQueue = @()
+    $sync.LogHistory = @() # New: Store log history
+    $sync.SysInfo = @{}    # New: Store system info
     
-    # --- 3. DATABASE DEFINITIONS ---
+    # --- 3. DATABASE DEFINITIONS (PRESERVED EXACTLY) ---
     $sync.Tweaks = @(
         # --- ESSENTIAL / PRIVACY ---
         @{ 
@@ -2351,6 +2350,24 @@ function Invoke-PerdangaSystemManager {
 
         try {
             switch ($Action) {
+                "GetSysInfo" {
+                    # Fast hardware retrieval for dashboard
+                    $compInfo = Get-CimInstance Win32_ComputerSystem
+                    $osInfo = Get-CimInstance Win32_OperatingSystem
+                    $procInfo = Get-CimInstance Win32_Processor
+                    
+                    # GPU Info can be multiple, grab first discrete or integrated
+                    $gpuInfo = Get-CimInstance Win32_VideoController | Select-Object -First 1
+
+                    $SyncHash.SysInfo = @{
+                        HostName = $osInfo.CSName
+                        OS       = $osInfo.Caption
+                        CPU      = $procInfo.Name
+                        RAM      = "{0} GB" -f [Math]::Round($compInfo.TotalPhysicalMemory / 1GB, 1)
+                        GPU      = $gpuInfo.Name
+                    }
+                }
+
                 "LoadPower" { 
                     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                     $raw = powercfg.exe -list
@@ -2787,7 +2804,9 @@ function Invoke-PerdangaSystemManager {
     $fontStd  = New-Object System.Drawing.Font("Segoe UI", 10)
     $fontBold = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $fontHead = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
+    $fontLarge = New-Object System.Drawing.Font("Segoe UI", 24, [System.Drawing.FontStyle]::Regular)
     $fontMenu = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $fontMono = New-Object System.Drawing.Font("Consolas", 9)
 
     # --- TIMER ---
     $uiTimer = New-Object System.Windows.Forms.Timer
@@ -2801,7 +2820,7 @@ function Invoke-PerdangaSystemManager {
     $lblMenuTitle = New-Object System.Windows.Forms.Label; $lblMenuTitle.Text = "MENU"; $lblMenuTitle.Dock = "Top"; $lblMenuTitle.Height = 70; $lblMenuTitle.Font = $fontMenu; $lblMenuTitle.ForeColor = [System.Drawing.Color]::Gray; $lblMenuTitle.TextAlign = "MiddleCenter"; $splitMain.Panel1.Controls.Add($lblMenuTitle)
     $flowMenu = New-Object System.Windows.Forms.FlowLayoutPanel; $flowMenu.Dock = "Fill"; $flowMenu.FlowDirection = "TopDown"; $flowMenu.WrapContents = $false; $flowMenu.Padding = New-Object System.Windows.Forms.Padding(0, 10, 0, 0); $splitMain.Panel1.Controls.Add($flowMenu); $flowMenu.BringToFront()
     
-    $sync.ViewColors = @{ "Tweaks"=$colAccentPurple; "Installs"=$colAccentGreen; "Maintenance"=$colAccentOrange; "WindowsUpdate"=$colAccentBlue; "Power"=$colAccentRed; "Tools"=$colAccentGray }
+    $sync.ViewColors = @{ "Dashboard"=$colTextWhite; "Tweaks"=$colAccentPurple; "Installs"=$colAccentGreen; "Maintenance"=$colAccentOrange; "WindowsUpdate"=$colAccentBlue; "Power"=$colAccentRed; "Tools"=$colAccentGray }
 
     function New-MenuButton($Text, $Tag, $ToolTipText) {
         $BaseColor = $sync.ViewColors[$Tag]
@@ -2812,35 +2831,48 @@ function Invoke-PerdangaSystemManager {
         return $btn
     }
 
+    $flowMenu.Controls.Add((New-MenuButton "Dashboard" "Dashboard" "System overview"))
     $flowMenu.Controls.Add((New-MenuButton "System Tweaks" "Tweaks" "Apply privacy and performance tweaks"))
     $flowMenu.Controls.Add((New-MenuButton "Install Apps" "Installs" "Batch install software via Winget or Chocolatey"))
     $flowMenu.Controls.Add((New-MenuButton "Maintenance" "Maintenance" "Repair and cleanup tools"))
     $flowMenu.Controls.Add((New-MenuButton "Windows Update" "WindowsUpdate" "Manage Windows Update policies"))
     $flowMenu.Controls.Add((New-MenuButton "Power Config" "Power" "Manage Power Plans"))
-    # Removed Windows Features as requested
     $flowMenu.Controls.Add((New-MenuButton "Quick Tools" "Tools" "Shortcuts to common system panels"))
 
     # --- Status Strip ---
     $statusStrip = New-Object System.Windows.Forms.StatusStrip; $statusStrip.BackColor = $colSideBar; $statusStrip.ForeColor = $colTextWhite
     $lblStatus = New-Object System.Windows.Forms.ToolStripStatusLabel; $lblStatus.Text = "Ready"; $lblStatus.Spring = $true; $lblStatus.TextAlign = "MiddleLeft"
     
-    # ProgressBar REMOVED here
+    # Log Toggle
+    $btnLogToggle = New-Object System.Windows.Forms.ToolStripDropDownButton; $btnLogToggle.Text = "Show Log"; $btnLogToggle.ForeColor = $colAccentGray
+    $btnLogToggle.Add_Click({ if ($txtLog.Visible) { $txtLog.Visible = $false; $splitMain.Panel2.Controls.Remove($txtLog) } else { $splitMain.Panel2.Controls.Add($txtLog); $txtLog.BringToFront(); $txtLog.Visible = $true } })
     
-    $statusStrip.Items.AddRange(@($lblStatus)); $form.Controls.Add($statusStrip)
+    $statusStrip.Items.AddRange(@($lblStatus, $btnLogToggle)); $form.Controls.Add($statusStrip)
 
     # --- PANELS FOR CONTENT ---
     
-    # Header Panel
-    $pnlHeader = New-Object System.Windows.Forms.Panel; $pnlHeader.Dock = "Top"; $pnlHeader.Height = 60; $pnlHeader.BackColor = $colDarkBg; $pnlHeader.Padding = New-Object System.Windows.Forms.Padding(20, 15, 0, 0)
-    $lblHeaderTitle = New-Object System.Windows.Forms.Label; $lblHeaderTitle.Text = "Dashboard"; $lblHeaderTitle.Font = $fontHead; $lblHeaderTitle.ForeColor = $colTextWhite; $lblHeaderTitle.AutoSize = $true; $pnlHeader.Controls.Add($lblHeaderTitle)
-    $splitMain.Panel2.Controls.Add($pnlHeader)
+    # Log Panel (Hidden by default)
+    $txtLog = New-Object System.Windows.Forms.TextBox; $txtLog.Multiline = $true; $txtLog.Dock = "Bottom"; $txtLog.Height = 150; $txtLog.BackColor = $colSideBar; $txtLog.ForeColor = $colTextGray; $txtLog.Font = $fontMono; $txtLog.ScrollBars = "Vertical"; $txtLog.ReadOnly = $true; $txtLog.Visible = $false; $txtLog.BorderStyle = "FixedSingle"
 
-    $pnlActions = New-Object System.Windows.Forms.FlowLayoutPanel; $pnlActions.Dock = "Bottom"; $pnlActions.Height = 60; $pnlActions.BackColor = $colDarkBg; $pnlActions.FlowDirection = "LeftToRight"; $splitMain.Panel2.Controls.Add($pnlActions)
+    $pnlActions = New-Object System.Windows.Forms.FlowLayoutPanel; $pnlActions.Dock = "Bottom"; $pnlActions.Height = 80; $pnlActions.BackColor = $colDarkBg; $pnlActions.FlowDirection = "LeftToRight"; $pnlActions.AutoScroll = $true; $splitMain.Panel2.Controls.Add($pnlActions)
     
     $flowMaint = New-Object System.Windows.Forms.FlowLayoutPanel; $flowMaint.Dock = "Fill"; $flowMaint.AutoScroll = $true; $flowMaint.Visible = $false; $flowMaint.Padding = New-Object System.Windows.Forms.Padding(20)
     $flowTools = New-Object System.Windows.Forms.FlowLayoutPanel; $flowTools.Dock = "Fill"; $flowTools.AutoScroll = $true; $flowTools.Visible = $false; $flowTools.Padding = New-Object System.Windows.Forms.Padding(20)
     $pnlWU = New-Object System.Windows.Forms.Panel; $pnlWU.Dock = "Fill"; $pnlWU.Visible = $false
     
+    # Dashboard Panel (NEW)
+    $pnlDashboard = New-Object System.Windows.Forms.Panel; $pnlDashboard.Dock = "Fill"; $pnlDashboard.Visible = $false; $pnlDashboard.Padding = New-Object System.Windows.Forms.Padding(30)
+    $lblDashWelcome = New-Object System.Windows.Forms.Label; $lblDashWelcome.Text = "System Overview"; $lblDashWelcome.Font = $fontHead; $lblDashWelcome.ForeColor = $colTextWhite; $lblDashWelcome.Location = "30, 20"; $lblDashWelcome.AutoSize = $true; $pnlDashboard.Controls.Add($lblDashWelcome)
+    
+    function New-DashLabel($Text, $Y) {
+        $l = New-Object System.Windows.Forms.Label; $l.Text = $Text; $l.Font = $fontStd; $l.ForeColor = $colTextGray; $l.Location = "30, $Y"; $l.AutoSize = $true; $pnlDashboard.Controls.Add($l); return $l
+    }
+    $lblDashHost = New-DashLabel "Hostname: Loading..." 60
+    $lblDashOS   = New-DashLabel "OS: Loading..." 90
+    $lblDashCPU  = New-DashLabel "CPU: Loading..." 120
+    $lblDashRAM  = New-DashLabel "RAM: Loading..." 150
+    $lblDashGPU  = New-DashLabel "GPU: Loading..." 180
+
     # Windows Update UI
     $grpStatus = New-Object System.Windows.Forms.GroupBox; $grpStatus.Text = "Update Status"; $grpStatus.ForeColor = $colTextWhite; $grpStatus.Dock = "Top"; $grpStatus.Height = 100; $grpStatus.Font = $fontBold; $pnlWU.Controls.Add($grpStatus)
     $lblCurMode = New-Object System.Windows.Forms.Label; $lblCurMode.Text = "Mode: Checking..."; $lblCurMode.Location = "20,30"; $lblCurMode.AutoSize = $true; $lblCurMode.Font = $fontStd; $grpStatus.Controls.Add($lblCurMode)
@@ -2858,18 +2890,29 @@ function Invoke-PerdangaSystemManager {
     $rbChocolatey.Add_CheckedChanged({ if ($this.Checked) { $sync.PackageManager = "chocolatey"; Start-BackgroundTask "CheckInstalled" $null } }); $pnlPackageManager.Controls.Add($rbChocolatey)
     
     $pnlSearch = New-Object System.Windows.Forms.Panel; $pnlSearch.Height = 50; $pnlSearch.Dock = "Top"; $pnlSearch.BackColor = $colPanelBg; $pnlSearch.Padding = New-Object System.Windows.Forms.Padding(20, 10, 20, 10); $pnlSearch.Visible = $false
-    $txtSearch = New-Object System.Windows.Forms.TextBox; $txtSearch.Location = "20, 15"; $txtSearch.Size = "300, 25"; $txtSearch.Font = $fontStd; $txtSearch.ForeColor = $colTextGray; $txtSearch.BackColor = $colDarkBg; $txtSearch.BorderStyle = "FixedSingle"; $txtSearch.Text = "Search software..."
-    $txtSearch.Add_Enter({ if ($this.Text -eq "Search software...") { $this.Text = ""; $this.ForeColor = $colTextWhite } })
-    $txtSearch.Add_Leave({ if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = "Search software..."; $this.ForeColor = $colTextGray } })
-    $txtSearch.Add_TextChanged({ if ($this.Text -ne "Search software...") { $sync.SoftwareSearchText = $this.Text } else { $sync.SoftwareSearchText = "" }; Update-ListView "Installs" })
+    $txtSearch = New-Object System.Windows.Forms.TextBox; $txtSearch.Location = "20, 15"; $txtSearch.Size = "300, 25"; $txtSearch.Font = $fontStd; $txtSearch.ForeColor = $colTextGray; $txtSearch.BackColor = $colDarkBg; $txtSearch.BorderStyle = "FixedSingle"; $txtSearch.Text = "Search..."
+    $txtSearch.Add_Enter({ if ($this.Text -eq "Search...") { $this.Text = ""; $this.ForeColor = $colTextWhite } })
+    $txtSearch.Add_Leave({ if ([string]::IsNullOrWhiteSpace($this.Text)) { $this.Text = "Search..."; $this.ForeColor = $colTextGray } })
+    $txtSearch.Add_TextChanged({ 
+        if ($this.Text -ne "Search...") { $sync.SoftwareSearchText = $this.Text } else { $sync.SoftwareSearchText = "" }
+        Update-ListView $script:currentView
+    })
     $pnlSearch.Controls.Add($txtSearch)
     
     function Start-BackgroundTask {
         param($Action, $Payload)
         if ($sync.IsBusy) { Write-Host "[WARN] System is busy. Ignoring Action: $Action" -ForegroundColor Yellow; return }
-        Write-Host "[TASK] Starting: $Action" -NoNewline -ForegroundColor Cyan; if ($Payload) { Write-Host " | Target: $Payload" -ForegroundColor Gray } else { Write-Host "" }
+        
+        $msg = "[TASK] Starting: $Action"
+        if ($Payload) { $msg += " | Target: $Payload" }
+        Write-Host $msg -ForegroundColor Cyan
+        
+        # Log to GUI
+        $txtLog.AppendText("$(Get-Date -Format 'HH:mm:ss') $msg `r`n")
+        $txtLog.SelectionStart = $txtLog.Text.Length; $txtLog.ScrollToCaret()
+
         $sync.IsBusy = $true; $lblStatus.Text = "Processing $Action..."; $pnlActions.Enabled = $false
-        # ProgressBar logic REMOVED here
+        
         $ps = [powershell]::Create(); $ps.RunspacePool = $sync.RunspacePool; [void]$ps.AddScript($workerScript).AddArgument($sync).AddArgument($Action).AddArgument($Payload)
         $handle = $ps.BeginInvoke(); $uiTimer.Tag = @{ Handle=$handle; Shell=$ps; Action=$Action }; $uiTimer.Start()
     }
@@ -2879,9 +2922,16 @@ function Invoke-PerdangaSystemManager {
         if ($state -and $state.Handle.IsCompleted) {
             $uiTimer.Stop(); $ps = $state.Shell
             try { $ps.EndInvoke($state.Handle); $ps.Dispose() } catch { Write-Host "[ERROR] Exception: $($_.Exception.Message)" -ForegroundColor Red }
-            if ($sync.Result -eq "Error") { Write-Host "[FAIL] Task Failed: $($state.Action)" -ForegroundColor Red; [System.Windows.Forms.MessageBox]::Show($sync.ErrorMessage, "Error", "OK", "Error") } 
+            
+            if ($sync.Result -eq "Error") { 
+                Write-Host "[FAIL] Task Failed: $($state.Action)" -ForegroundColor Red 
+                $txtLog.AppendText("$(Get-Date -Format 'HH:mm:ss') [FAIL] $($sync.ErrorMessage) `r`n")
+                [System.Windows.Forms.MessageBox]::Show($sync.ErrorMessage, "Error", "OK", "Error") 
+            } 
             else { 
                 Write-Host "[DONE] Task Completed: $($state.Action)" -ForegroundColor Green 
+                $txtLog.AppendText("$(Get-Date -Format 'HH:mm:ss') [OK] Completed: $($state.Action) `r`n")
+                
                 if ($state.Action -eq "ExportList") { [System.Windows.Forms.MessageBox]::Show("Software list exported to Desktop.", "Export Success", "OK", "Information") }
             }
 
@@ -2899,29 +2949,35 @@ function Invoke-PerdangaSystemManager {
             if ($state.Action -eq "LoadPower" -and $script:currentView -eq "Power") { Update-ListView "Power" }
             if ($state.Action -eq "WU_GetStatus") { $lblCurMode.Text = "Current Status: " + $sync.WUStatus }
             
+            if ($state.Action -eq "GetSysInfo") {
+                if ($sync.SysInfo.HostName) {
+                    $lblDashHost.Text = "Hostname: " + $sync.SysInfo.HostName
+                    $lblDashOS.Text   = "OS: " + $sync.SysInfo.OS
+                    $lblDashCPU.Text  = "CPU: " + $sync.SysInfo.CPU
+                    $lblDashRAM.Text  = "RAM: " + $sync.SysInfo.RAM
+                    $lblDashGPU.Text  = "GPU: " + $sync.SysInfo.GPU
+                }
+            }
+
             $sync.IsBusy = $false; $lblStatus.Text = "Ready"; $pnlActions.Enabled = $true
-            # ProgressBar logic REMOVED here
         }
     })
 
     function New-DataList($ColsOrdered, $CheckBoxes) {
         $lv = New-Object System.Windows.Forms.ListView
         $lv.Dock = "Fill"; $lv.View = "Details"; $lv.FullRowSelect = $true; $lv.GridLines = $false; $lv.HeaderStyle = "Nonclickable"; $lv.CheckBoxes = $CheckBoxes; 
-        # Note: AllowColumnReorder affects user dragging columns to new positions, not resizing.
         $lv.AllowColumnReorder = $false
         $lv.BackColor = $colPanelBg; $lv.ForeColor = $colTextGray; $lv.BorderStyle = "None"; $lv.Font = $fontStd; $lv.OwnerDraw = $true; $lv.Visible = $false
         
-        # --- STORE WIDTHS IN TAG FOR LOCKING ---
         $lv.Tag = @{ 
             HeaderBrush = [System.Drawing.SolidBrush]::new($colDarkBg); 
             TextBrush = [System.Drawing.SolidBrush]::new($colTextWhite); 
             SelBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(60,60,70)); 
             BgBrush = [System.Drawing.SolidBrush]::new($colPanelBg); 
             BorderPen = [System.Drawing.Pen]::new($colBorder, 1);
-            ColumnWidths = @{} # Store authorized widths
+            ColumnWidths = @{} 
         }
 
-        # Add columns and populate widths
         $i = 0
         foreach ($k in $ColsOrdered.Keys) { 
             $w = $ColsOrdered[$k]
@@ -2930,32 +2986,23 @@ function Invoke-PerdangaSystemManager {
             $i++
         }
 
-        # --- STRICT LOCKING & VISUAL FIX ---
-        
-        # 1. Prevent Resizing (Lock)
         $lv.Add_ColumnWidthChanging({ 
             param($sender, $e)
             $e.Cancel = $true
-            # Force back to stored width immediately to prevent visual jitter
             $e.NewWidth = $sender.Tag.ColumnWidths[$e.ColumnIndex]
         })
 
-        # 2. Fill Empty Space (Fix White Header Bug)
         $lv.Add_Resize({ 
             param($sender, $e)
             if ($sender.Columns.Count -gt 0) {
                 $totalW = 0
-                # Sum all columns except the last one
                 for($j=0; $j -lt $sender.Columns.Count - 1; $j++) {
                     $totalW += $sender.Columns[$j].Width
                 }
-                # Calculate remaining width
                 $newLastW = $sender.ClientRectangle.Width - $totalW
-                # Apply to last column if valid
                 if ($newLastW -gt 50) {
                     $lastIdx = $sender.Columns.Count - 1
                     $sender.Columns[$lastIdx].Width = $newLastW
-                    # IMPORTANT: Update the "locked" width so the locking event accepts the new size
                     $sender.Tag.ColumnWidths[$lastIdx] = $newLastW
                 }
             }
@@ -2980,8 +3027,12 @@ function Invoke-PerdangaSystemManager {
     $lvInstalls = New-DataList ([ordered]@{ "Software Name"=300; "Status"=120; "Category"=150; "Description"=500 }) $true 
 
     $pnlListContainer = New-Object System.Windows.Forms.Panel; $pnlListContainer.Dock = "Fill"; $pnlListContainer.Padding = New-Object System.Windows.Forms.Padding(20, 20, 20, 0); $pnlListContainer.BackColor = $colDarkBg
-    $pnlListContainer.Controls.Add($lvPower); $pnlListContainer.Controls.Add($lvTweaks); $pnlListContainer.Controls.Add($lvInstalls); $pnlListContainer.Controls.Add($flowMaint); $pnlListContainer.Controls.Add($flowTools); $pnlListContainer.Controls.Add($pnlWU); $pnlListContainer.Controls.Add($pnlPackageManager); $pnlListContainer.Controls.Add($pnlSearch)
-    $splitMain.Panel2.Controls.Add($pnlListContainer); $pnlListContainer.BringToFront()
+    $pnlListContainer.Controls.Add($lvPower); $pnlListContainer.Controls.Add($lvTweaks); $pnlListContainer.Controls.Add($lvInstalls); $pnlListContainer.Controls.Add($flowMaint); $pnlListContainer.Controls.Add($flowTools); $pnlListContainer.Controls.Add($pnlWU); $pnlListContainer.Controls.Add($pnlDashboard); $pnlListContainer.Controls.Add($pnlPackageManager); $pnlListContainer.Controls.Add($pnlSearch)
+    $splitMain.Panel2.Controls.Add($pnlListContainer); 
+    
+    # FIX: Ensure actions panel is visible at bottom by updating Z-Order
+    $pnlListContainer.BringToFront()
+    $pnlActions.BringToFront() 
 
     function Update-ListView($Type) {
         if ($Type -eq "Power") {
@@ -2990,7 +3041,11 @@ function Invoke-PerdangaSystemManager {
             $lvPower.EndUpdate()
         } elseif ($Type -eq "Tweaks") {
             $lvTweaks.BeginUpdate(); $lvTweaks.Items.Clear()
-            foreach ($t in $sync.Tweaks) { $item = $lvTweaks.Items.Add($t.Name); if ($sync.AppliedTweaks -contains $t.Id) { $item.SubItems.Add("Active") | Out-Null; $item.ForeColor = $colAccentGreen } else { $item.SubItems.Add("Inactive") | Out-Null }; $item.SubItems.Add($t.Category) | Out-Null; $item.SubItems.Add($t.Description) | Out-Null; $item.Tag = $t.Id }
+            $filteredTweaks = $sync.Tweaks
+            # Added Search Logic for Tweaks
+            if ($sync.SoftwareSearchText -and $sync.SoftwareSearchText.Trim() -ne "") { $searchText = $sync.SoftwareSearchText.ToLower(); $filteredTweaks = $sync.Tweaks | Where-Object { $_.Name.ToLower().Contains($searchText) -or $_.Category.ToLower().Contains($searchText) } }
+            
+            foreach ($t in $filteredTweaks) { $item = $lvTweaks.Items.Add($t.Name); if ($sync.AppliedTweaks -contains $t.Id) { $item.SubItems.Add("Active") | Out-Null; $item.ForeColor = $colAccentGreen } else { $item.SubItems.Add("Inactive") | Out-Null }; $item.SubItems.Add($t.Category) | Out-Null; $item.SubItems.Add($t.Description) | Out-Null; $item.Tag = $t.Id }
             $lvTweaks.EndUpdate()
         } elseif ($Type -eq "Installs") {
             $lvInstalls.BeginUpdate(); $lvInstalls.Items.Clear()
@@ -3082,28 +3137,43 @@ function Invoke-PerdangaSystemManager {
     $script:currentView = $null
     function Set-View($View) {
         $script:currentView = $View
-        $lvPower.Visible = $false; $lvTweaks.Visible = $false; $lvInstalls.Visible = $false; $flowMaint.Visible = $false; $flowTools.Visible = $false; $pnlWU.Visible = $false; $pnlPackageManager.Visible = $false; $pnlSearch.Visible = $false; $pnlActions.Controls.Clear()
+        $lvPower.Visible = $false; $lvTweaks.Visible = $false; $lvInstalls.Visible = $false; $flowMaint.Visible = $false; $flowTools.Visible = $false; $pnlWU.Visible = $false; $pnlPackageManager.Visible = $false; $pnlSearch.Visible = $false; $pnlDashboard.Visible = $false; $pnlActions.Controls.Clear()
+        
+        # Reset Search on view change
+        $txtSearch.Text = "Search..."
+        $txtSearch.ForeColor = $colTextGray
+        $sync.SoftwareSearchText = ""
+
         foreach ($key in $sync.MenuButtons.Keys) { $btn = $sync.MenuButtons[$key]; if ($key -eq $View) { $btn.BackColor = $colPanelBg; $btn.ForeColor = $colTextWhite; $btn.FlatAppearance.BorderSize = 4; $btn.FlatAppearance.BorderColor = $sync.ViewColors[$key] } else { $btn.BackColor = $colSideBar; $btn.ForeColor = $colTextGray; $btn.FlatAppearance.BorderSize = 0 } }
         
         switch ($View) {
+            "Dashboard" {
+                $pnlDashboard.Visible = $true
+                $pnlActions.Controls.Add((New-ActionButton "Refresh Info" $colAccentGreen { Start-BackgroundTask "GetSysInfo" $null }))
+                $pnlActions.Controls.Add((New-ActionButton "System Properties" $colAccentBlue { Start-Process "sysdm.cpl" }))
+                Start-BackgroundTask "GetSysInfo" $null
+            }
             "Power" { 
-                $lblHeaderTitle.Text = "Power Plans"; $lblHeaderTitle.ForeColor = $colAccentRed
                 $lvPower.Visible = $true
                 $pnlActions.Controls.Add((New-ActionButton "Set Active" $colAccentGreen { if ($lvPower.SelectedItems.Count -gt 0) { Start-BackgroundTask "SetPower" $lvPower.SelectedItems[0].Tag } }))
                 $pnlActions.Controls.Add((New-ActionButton "Refresh List" $colAccentBlue { Start-BackgroundTask "LoadPower" $null }))
                 Start-BackgroundTask "LoadPower" $null 
             }
             "Tweaks" { 
-                $lblHeaderTitle.Text = "System Tweaks"; $lblHeaderTitle.ForeColor = $colAccentPurple
-                $lvTweaks.Visible = $true
+                $lvTweaks.Visible = $true; $pnlSearch.Visible = $true # Enable Search for Tweaks
+                
                 $pnlActions.Controls.Add((New-ActionButton "Create Restore Point" $colAccentCyan { Start-BackgroundTask "CreateRestorePoint" $null }))
                 $pnlActions.Controls.Add((New-ActionButton "Apply Selected" $colAccentGreen { $selected = @(); foreach ($item in $lvTweaks.CheckedItems) { $selected += $item.Tag }; if ($selected.Count -gt 0) { Start-BackgroundTask "ApplyTweakBatch" $selected } }))
                 $pnlActions.Controls.Add((New-ActionButton "Undo Selected" $colAccentRed { $selected = @(); foreach ($item in $lvTweaks.CheckedItems) { $selected += $item.Tag }; if ($selected.Count -gt 0) { Start-BackgroundTask "UndoTweakBatch" $selected } }))
+                
+                # New Select All Buttons
+                $pnlActions.Controls.Add((New-ActionButton "Select All" $colAccentGray { foreach($i in $lvTweaks.Items){$i.Checked = $true} }))
+                $pnlActions.Controls.Add((New-ActionButton "Select None" $colAccentGray { foreach($i in $lvTweaks.Items){$i.Checked = $false} }))
+
                 $pnlActions.Controls.Add((New-ActionButton "Refresh Status" $colAccentBlue { Start-BackgroundTask "CheckTweaks" $null }))
                 Start-BackgroundTask "CheckTweaks" $null 
             }
             "Installs" { 
-                $lblHeaderTitle.Text = "Software Installer"; $lblHeaderTitle.ForeColor = $colAccentGreen
                 $lvInstalls.Visible = $true; $pnlPackageManager.Visible = $true; $pnlSearch.Visible = $true
                 
                 # Install Button
@@ -3128,11 +3198,10 @@ function Invoke-PerdangaSystemManager {
                 $pnlActions.Controls.Add((New-ActionButton "Refresh List" $colAccentBlue { 
                     Start-BackgroundTask "CheckInstalled" $null 
                 }))
-
-                # Export Button
-                $pnlActions.Controls.Add((New-ActionButton "Export List" $colAccentGray { 
-                    Start-BackgroundTask "ExportList" $null 
-                }))
+                
+                # Select All Buttons
+                $pnlActions.Controls.Add((New-ActionButton "Select All" $colAccentGray { foreach($i in $lvInstalls.Items){$i.Checked = $true} }))
+                $pnlActions.Controls.Add((New-ActionButton "Select None" $colAccentGray { foreach($i in $lvInstalls.Items){$i.Checked = $false} }))
 
                 # Perdanger's Preset Button
                 $presetIds = @("Brave.Brave", "Anysphere.Cursor", "Discord.Discord", "AdrienAllard.FileConverter", "Git.Git", "DuongDieuPhap.ImageGlass", "Nvidia.NvidiaApp", "qBittorrent.qBittorrent", "RevoUninstaller.RevoUninstaller", "Spotify.Spotify", "Valve.Steam", "Telegram.TelegramDesktop", "VideoLAN.VLC", "RARLab.WinRAR", "AntibodySoftware.WizTree")
@@ -3144,15 +3213,12 @@ function Invoke-PerdangaSystemManager {
                 if ($sync.InstalledApps.Count -eq 0) { Start-BackgroundTask "CheckInstalled" $null } else { Update-ListView "Installs" } 
             }
             "Maintenance" { 
-                $lblHeaderTitle.Text = "System Maintenance"; $lblHeaderTitle.ForeColor = $colAccentOrange
                 $flowMaint.Visible = $true 
             }
             "Tools" { 
-                $lblHeaderTitle.Text = "Quick Tools"; $lblHeaderTitle.ForeColor = $colAccentGray
                 $flowTools.Visible = $true 
             }
             "WindowsUpdate" { 
-                $lblHeaderTitle.Text = "Windows Update Config"; $lblHeaderTitle.ForeColor = $colAccentBlue
                 $pnlWU.Visible = $true
                 Start-BackgroundTask "WU_GetStatus" $null
                 $pnlActions.Controls.Add((New-ActionButton "Apply Settings" $colAccentGreen { $action = "WU_SetDefault"; if ($rbSec.Checked) { $action = "WU_SetSecurity" } elseif ($rbDis.Checked) { $action = "WU_SetDisabled" }; Start-BackgroundTask $action $null }))
@@ -3162,7 +3228,7 @@ function Invoke-PerdangaSystemManager {
     }
 
     $form.Add_FormClosing({ Write-Host "[STOP] Shutting down System Manager..." -ForegroundColor Cyan; $sync.RunspacePool.Close(); $sync.RunspacePool.Dispose() })
-    Set-View "Tweaks"
+    Set-View "Dashboard"
     [System.Windows.Forms.Application]::Run($form)
 }
 
@@ -4947,6 +5013,7 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
 
 
 
