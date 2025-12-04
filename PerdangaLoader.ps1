@@ -2874,6 +2874,24 @@ function Invoke-PerdangaSystemManager {
     $lblDashRAM  = New-DashLabel "RAM: Loading..." 150
     $lblDashGPU  = New-DashLabel "GPU: Loading..." 180
 
+    # --- NEW: Dashboard Image and Caption ---
+    $pbDash = New-Object System.Windows.Forms.PictureBox
+    $pbDash.Location = "0, 220"
+    $pbDash.Size = "400, 250"
+    $pbDash.SizeMode = "Zoom"
+    # Using ImageLocation to allow asynchronous loading without freezing UI
+    # Note: If link is a webpage and not direct image, it may fail silently or show X
+    $pbDash.ImageLocation = "https://i.ibb.co/209g9N6d/cyom-Pgm-Kr-SY.png" 
+    $pnlDashboard.Controls.Add($pbDash)
+
+    $lblDashCaption = New-Object System.Windows.Forms.Label
+    $lblDashCaption.Text = "Perdanga Forever"
+    $lblDashCaption.Font = $fontHead
+    $lblDashCaption.ForeColor = $colAccentPurple # Matching theme accent
+    $lblDashCaption.AutoSize = $true
+    $lblDashCaption.Location = "30, 480"
+    $pnlDashboard.Controls.Add($lblDashCaption)
+
     # Windows Update UI
     $grpStatus = New-Object System.Windows.Forms.GroupBox; $grpStatus.Text = "Update Status"; $grpStatus.ForeColor = $colTextWhite; $grpStatus.Dock = "Top"; $grpStatus.Height = 100; $grpStatus.Font = $fontBold; $pnlWU.Controls.Add($grpStatus)
     $lblCurMode = New-Object System.Windows.Forms.Label; $lblCurMode.Text = "Mode: Checking..."; $lblCurMode.Location = "20,30"; $lblCurMode.AutoSize = $true; $lblCurMode.Font = $fontStd; $grpStatus.Controls.Add($lblCurMode)
@@ -5035,6 +5053,7 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
 
 
 
