@@ -2462,8 +2462,29 @@ function Invoke-PerdangaSystemManager {
                     $appliedIds = @()
                     if (!(Test-Path 'HKU:\')) { New-PSDrive -PSProvider Registry -Name HKU -Root HKEY_USERS -ErrorAction SilentlyContinue | Out-Null }
 
+                    # --- OPTIMIZATION: BATCH FETCHING ---
+                    # Fetching Services and Tasks once is much faster than querying CIM/WMI/COM inside the loop.
+                    
+                    # 1. Cache Services
+                    $serviceMap = @{}
+                    try {
+                        Get-Service -ErrorAction SilentlyContinue | ForEach-Object { $serviceMap[$_.Name] = $_ }
+                    } catch {}
+
+                    # 2. Cache Scheduled Tasks (The biggest performance bottleneck)
+                    $taskMap = @{}
+                    try {
+                        Get-ScheduledTask -ErrorAction SilentlyContinue | ForEach-Object { 
+                            # Key format: "\Path\Name" (Normalized)
+                            $key = ($_.TaskPath + $_.TaskName).Replace("\\", "\").Trim()
+                            $taskMap[$key] = $_ 
+                        }
+                    } catch {}
+
                     foreach ($tweak in $SyncHash.Tweaks) {
                         $isApplied = $true
+                        
+                        # Registry Check (Fast enough to do individually)
                         if ($tweak.Registry) {
                             foreach ($reg in $tweak.Registry) {
                                 try {
@@ -2474,29 +2495,32 @@ function Invoke-PerdangaSystemManager {
                                 }
                             }
                         }
+                        
+                        # Service Check (Using Cache)
                         if ($isApplied -and $tweak.Service) {
                             foreach ($svc in $tweak.Service) {
-                                $s = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
-                                # Safe Optimization Logic: If service is supposed to be Disabled/Manual, check if it's currently correct
+                                $s = $serviceMap[$svc.Name]
                                 if ($s) {
                                     if ($svc.StartupType -eq "Disabled" -and $s.StartType -ne "Disabled") { $isApplied = $false; break }
                                     if ($svc.StartupType -eq "Manual" -and $s.StartType -eq "Automatic") { $isApplied = $false; break }
                                 }
                             }
                         }
+                        
+                        # Task Check (Using Cache)
                         if ($isApplied -and $tweak.ScheduledTask) {
                             foreach ($task in $tweak.ScheduledTask) {
-                                try {
-                                    $tName = $task.Name; $tPath = "\"
-                                    if($task.Name.Contains("\")) {
-                                        $tPath = $task.Name.Substring(0, $task.Name.LastIndexOf("\"))
-                                        $tName = $task.Name.Substring($task.Name.LastIndexOf("\")+1)
-                                    }
-                                    $t = Get-ScheduledTask -TaskName $tName -TaskPath $tPath -ErrorAction SilentlyContinue
-                                    if ($t -and $t.State -ne $task.State) { $isApplied = $false; break }
-                                } catch { }
+                                # Construct lookup key based on definition
+                                # Definition example: "Microsoft\Windows\..." 
+                                # We need to ensure it matches the cache key format "\Microsoft\Windows\..."
+                                $lookupKey = "\" + $task.Name.TrimStart("\")
+                                $lookupKey = $lookupKey.Replace("\\", "\") # Normalize
+                                
+                                $t = $taskMap[$lookupKey]
+                                if ($t -and $t.State -ne $task.State) { $isApplied = $false; break }
                             }
                         }
+                        
                         if ($isApplied) { $appliedIds += $tweak.Id }
                     }
                     $SyncHash.AppliedTweaks = $appliedIds
@@ -2505,47 +2529,63 @@ function Invoke-PerdangaSystemManager {
                 "CheckInstalled" {
                     try {
                         $installedIds = @()
-                        if ($SyncHash.PackageManager -eq "winget") {
-                            $cmd = "winget list"
-                            $rawList = Invoke-Expression $cmd | Out-String
-                            foreach ($sw in $SyncHash.Software) {
-                                if ($rawList -like "*$($sw.Id)*") { $installedIds += $sw.Id }
-                            }
-                        } else {
-                            # --- ROBUST CHOCO DETECTION ---
-                            # Background threads often lack the PATH environment to find 'choco'
-                            # We check common locations if not in PATH
-                            $chocoExe = "choco"
-                            if (Get-Command "choco" -ErrorAction SilentlyContinue) { 
-                                $chocoExe = "choco" 
-                            } elseif (Test-Path "$env:ProgramData\chocolatey\bin\choco.exe") { 
-                                $chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe" 
-                            }
-
-                            # Use Start-Process to ensure we capture output even if Invoke-Expression fails
-                            $pInfo = New-Object System.Diagnostics.ProcessStartInfo
-                            $pInfo.FileName = $chocoExe
-                            $pInfo.Arguments = "list --local-only --limit-output" # limit-output gives "name|version" which is easier to parse
-                            $pInfo.RedirectStandardOutput = $true
-                            $pInfo.UseShellExecute = $false
-                            $pInfo.CreateNoWindow = $true
-                            $p = [System.Diagnostics.Process]::Start($pInfo)
-                            $rawList = $p.StandardOutput.ReadToEnd()
-                            $p.WaitForExit()
-
-                            foreach ($sw in $SyncHash.Software) {
-                                # Heuristic matching:
-                                # 1. Match the exact suffix (e.g. "Google.Chrome" -> "Chrome")
-                                # 2. Match the Name (e.g. "Firefox")
-                                $suffix = $sw.Id.Split(".")[-1]
-                                $name = $sw.Name.Replace(" ", "").ToLower() # Simple normalization
-                                
-                                if ($rawList -like "*$suffix|*") { $installedIds += $sw.Id }
-                                elseif ($rawList -like "*$name|*") { $installedIds += $sw.Id }
+                        
+                        # --- OPTIMIZED DETECTION LOGIC (FAST REGISTRY + FILE SCAN) ---
+                        # Instead of running slow CLI commands (winget list/choco list), we scan the Registry and Files.
+                        # This eliminates "infinite loading" and timeouts.
+                        
+                        # 1. GATHER ALL INSTALLED DISPLAY NAMES FROM REGISTRY
+                        $regNames = New-Object System.Collections.Generic.HashSet[string]
+                        $uninstallPaths = @(
+                            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+                        )
+                        foreach ($path in $uninstallPaths) {
+                            Get-ItemProperty $path -ErrorAction SilentlyContinue | ForEach-Object {
+                                if ($_.DisplayName) { [void]$regNames.Add($_.DisplayName.Trim()) }
                             }
                         }
+                        
+                        # 2. GATHER CHOCO LIBS (IF APPLICABLE)
+                        # Scanning folders in ProgramData is infinitely faster than 'choco list'
+                        $chocoLibs = New-Object System.Collections.Generic.HashSet[string]
+                        if ($SyncHash.PackageManager -eq "chocolatey") {
+                            $chocoPath = "$env:ProgramData\chocolatey\lib"
+                            if (Test-Path $chocoPath) {
+                                Get-ChildItem -Path $chocoPath -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+                                    [void]$chocoLibs.Add($_.Name.ToLower())
+                                }
+                            }
+                        }
+
+                        # 3. MATCHING LOGIC
+                        foreach ($sw in $SyncHash.Software) {
+                            $isFound = $false
+                            $swName = $sw.Name
+                            $swId   = $sw.Id # e.g. "Google.Chrome"
+                            
+                            # Heuristic A: Registry Name Match (Contains)
+                            # We iterate the hashset to find substring matches
+                            foreach ($regName in $regNames) {
+                                if ($regName -like "*$swName*") { $isFound = $true; break }
+                                if ($regName -like "*$swId*") { $isFound = $true; break }
+                                # Specific fix for VS Code (Reg: "Microsoft Visual Studio Code", Name: "VS Code")
+                                if ($swName -eq "VS Code" -and $regName -like "*Visual Studio Code*") { $isFound = $true; break }
+                            }
+
+                            # Heuristic B: Chocolatey Folder Match (Exact or Suffix)
+                            if (!$isFound -and $SyncHash.PackageManager -eq "chocolatey") {
+                                $chocoId = $sw.Id.Split(".")[-1].ToLower() # "Google.Chrome" -> "chrome"
+                                if ($chocoLibs.Contains($chocoId)) { $isFound = $true }
+                                if ($chocoLibs.Contains($sw.Id.ToLower())) { $isFound = $true }
+                            }
+
+                            if ($isFound) { $installedIds += $sw.Id }
+                        }
+                        
                         $SyncHash.InstalledApps = $installedIds
-                    } catch {}
+                    } catch { [Console]::WriteLine("[ERROR] CheckInstalled failed: $_") }
                 }
 
                 "InstallApp" { Manage-Package -Id $Payload -Mode "Install"; $SyncHash.ActionQueue += "CheckInstalled" }
@@ -4869,4 +4909,5 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
 
