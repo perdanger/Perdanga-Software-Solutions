@@ -2881,7 +2881,7 @@ function Invoke-PerdangaSystemManager {
     $pbDash.SizeMode = "Zoom"
     # Using ImageLocation to allow asynchronous loading without freezing UI
     # Note: If link is a webpage and not direct image, it may fail silently or show X
-    $pbDash.ImageLocation = "https://i.ibb.co/qMH4Vjxr/2025-05-27-165933.png" 
+    $pbDash.ImageLocation = "https://i.ibb.co/SDSSFsPZ/2.png" 
     $pnlDashboard.Controls.Add($pbDash)
 
     $lblDashCaption = New-Object System.Windows.Forms.Label
@@ -5053,6 +5053,7 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
 
 
 
