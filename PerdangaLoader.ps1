@@ -2,7 +2,7 @@
 .SYNOPSIS
     Author: Roman Zhdanov
     Version: 1.7
-    Last Modified: 03.12.2025
+    Last Modified: 04.12.2025
 .DESCRIPTION
     Perdanga Software Solutions is a PowerShell script designed to simplify the installation, 
     uninstallation, and management of essential Windows software. Includes dynamic application
@@ -1896,7 +1896,11 @@ function Invoke-PerdangaSystemManager {
     .SYNOPSIS
         A comprehensive GUI-based manager for Power Plans, System Tweaks, Maintenance, Software, and Windows Update.
     .DESCRIPTION
-        VERSION 5.6:
+        VERSION 5.8:
+        - FIX: "Export List" no longer hangs the process (moved MessageBox to UI thread).
+        - UPDATE: "MENU" text is now centered in the sidebar.
+        - NEW: Added "Export List" to Install Apps (Saves detected apps to Desktop).
+        - NEW: Added "Rebuild Icon Cache" to Maintenance tools.
         - NEW: Added "Refresh List" button to Install Apps tab.
         - NEW: Added "Update Selected" button to Install Apps tab.
         - FIX: Chocolatey detection logic improved (Path/Output parsing).
@@ -2591,6 +2595,25 @@ function Invoke-PerdangaSystemManager {
                 "InstallApp" { Manage-Package -Id $Payload -Mode "Install"; $SyncHash.ActionQueue += "CheckInstalled" }
                 "UninstallApp" { Manage-Package -Id $Payload -Mode "Uninstall"; $SyncHash.ActionQueue += "CheckInstalled" }
                 "UpgradeApp" { Manage-Package -Id $Payload -Mode "Upgrade"; $SyncHash.ActionQueue += "CheckInstalled" }
+                
+                "ExportList" {
+                    $path = "$([Environment]::GetFolderPath('Desktop'))\Perdanga_SoftwareList.txt"
+                    $content = "--- Perdanga System Manager: Installed Software Report ---`r`n"
+                    $content += "Date: $(Get-Date)`r`n`r`n"
+                    $content += "--- Detected Database Matches ---`r`n"
+                    if ($SyncHash.InstalledApps) { $content += ($SyncHash.InstalledApps -join "`r`n") }
+                    else { $content += "None detected." }
+                    
+                    # Also include a raw dump of registry keys for complete backup utility
+                    $content += "`r`n`r`n--- Raw System Application List (Registry Dump) ---`r`n"
+                    $regKeys = Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | Select-Object DisplayName, DisplayVersion, Publisher
+                    $regKeys += Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Select-Object DisplayName, DisplayVersion, Publisher
+                    $regKeys += Get-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Select-Object DisplayName, DisplayVersion, Publisher
+                    $sorted = $regKeys | Where-Object { $_.DisplayName } | Sort-Object DisplayName | Select-Object -Unique DisplayName, DisplayVersion, Publisher
+                    foreach($item in $sorted) { $content += "$($item.DisplayName) ($($item.DisplayVersion))`r`n" }
+
+                    $content | Out-File -FilePath $path -Encoding UTF8
+                }
 
                 "RunCommand" {
                     $cmd = $Payload; $args = $null
@@ -2644,6 +2667,12 @@ function Invoke-PerdangaSystemManager {
                 }
                 "Maint_Network" { 
                     netsh winsock reset; netsh int ip reset; netsh winhttp reset proxy; ipconfig /flushdns 
+                }
+                "Maint_IconCache" {
+                    Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
+                    Remove-Item "$env:localappdata\IconCache.db" -Force -ErrorAction SilentlyContinue
+                    Remove-Item "$env:localappdata\Microsoft\Windows\Explorer\iconcache*" -Force -ErrorAction SilentlyContinue
+                    Start-Process "explorer.exe"
                 }
                 "Maint_ReinstallPackageManager" {
                     if ($SyncHash.PackageManager -eq "winget") { Start-Process -FilePath "winget" -ArgumentList "install -e --accept-source-agreements --accept-package-agreements Microsoft.AppInstaller" -Wait -NoNewWindow } 
@@ -2769,7 +2798,7 @@ function Invoke-PerdangaSystemManager {
     $splitMain = New-Object System.Windows.Forms.SplitContainer; $splitMain.Dock = "Fill"; $splitMain.FixedPanel = "Panel1"; $splitMain.SplitterDistance = 260; $splitMain.Panel1.BackColor = $colSideBar; $splitMain.Panel2.BackColor = $colDarkBg; $form.Controls.Add($splitMain)
 
     # Sidebar
-    $lblMenuTitle = New-Object System.Windows.Forms.Label; $lblMenuTitle.Text = "  MENU"; $lblMenuTitle.Dock = "Top"; $lblMenuTitle.Height = 70; $lblMenuTitle.Font = $fontMenu; $lblMenuTitle.ForeColor = [System.Drawing.Color]::Gray; $lblMenuTitle.TextAlign = "MiddleLeft"; $splitMain.Panel1.Controls.Add($lblMenuTitle)
+    $lblMenuTitle = New-Object System.Windows.Forms.Label; $lblMenuTitle.Text = "MENU"; $lblMenuTitle.Dock = "Top"; $lblMenuTitle.Height = 70; $lblMenuTitle.Font = $fontMenu; $lblMenuTitle.ForeColor = [System.Drawing.Color]::Gray; $lblMenuTitle.TextAlign = "MiddleCenter"; $splitMain.Panel1.Controls.Add($lblMenuTitle)
     $flowMenu = New-Object System.Windows.Forms.FlowLayoutPanel; $flowMenu.Dock = "Fill"; $flowMenu.FlowDirection = "TopDown"; $flowMenu.WrapContents = $false; $flowMenu.Padding = New-Object System.Windows.Forms.Padding(0, 10, 0, 0); $splitMain.Panel1.Controls.Add($flowMenu); $flowMenu.BringToFront()
     
     $sync.ViewColors = @{ "Tweaks"=$colAccentPurple; "Installs"=$colAccentGreen; "Maintenance"=$colAccentOrange; "WindowsUpdate"=$colAccentBlue; "Power"=$colAccentRed; "Tools"=$colAccentGray }
@@ -2851,7 +2880,10 @@ function Invoke-PerdangaSystemManager {
             $uiTimer.Stop(); $ps = $state.Shell
             try { $ps.EndInvoke($state.Handle); $ps.Dispose() } catch { Write-Host "[ERROR] Exception: $($_.Exception.Message)" -ForegroundColor Red }
             if ($sync.Result -eq "Error") { Write-Host "[FAIL] Task Failed: $($state.Action)" -ForegroundColor Red; [System.Windows.Forms.MessageBox]::Show($sync.ErrorMessage, "Error", "OK", "Error") } 
-            else { Write-Host "[DONE] Task Completed: $($state.Action)" -ForegroundColor Green }
+            else { 
+                Write-Host "[DONE] Task Completed: $($state.Action)" -ForegroundColor Green 
+                if ($state.Action -eq "ExportList") { [System.Windows.Forms.MessageBox]::Show("Software list exported to Desktop.", "Export Success", "OK", "Information") }
+            }
 
             # Queue Processing
             foreach ($qItem in $sync.ActionQueue) {
@@ -3026,6 +3058,7 @@ function Invoke-PerdangaSystemManager {
     $flowMaint.Controls.Add((New-MaintCard "System Scan" "Chkdsk -> SFC -> DISM -> SFC." "Maint_SystemScan" $colAccentRed))
     $flowMaint.Controls.Add((New-MaintCard "Deep Cleanup" "Disk Cleanup + Component Store." "Maint_Cleanup" $colAccentBlue))
     $flowMaint.Controls.Add((New-MaintCard "Network Reset" "Flush DNS, Reset IP/Winsock." "Maint_Network" $colAccentRed))
+    $flowMaint.Controls.Add((New-MaintCard "Rebuild Icon Cache" "Fixes broken/blank icons." "Maint_IconCache" $colAccentOrange))
     $flowMaint.Controls.Add((New-MaintCard "Reinstall Package Manager" "Reinstall Winget/Choco." "Maint_ReinstallPackageManager" $colAccentPurple))
     $flowMaint.Controls.Add((New-MaintCard "Remove OneDrive" "Uninstall OneDrive." "Maint_RemoveOneDrive" $colAccentRed))
     $flowMaint.Controls.Add((New-MaintCard "O&O ShutUp10" "Run O&O ShutUp10." "Maint_OOSU10" $colAccentBlue))
@@ -3094,6 +3127,11 @@ function Invoke-PerdangaSystemManager {
                 # Refresh Button
                 $pnlActions.Controls.Add((New-ActionButton "Refresh List" $colAccentBlue { 
                     Start-BackgroundTask "CheckInstalled" $null 
+                }))
+
+                # Export Button
+                $pnlActions.Controls.Add((New-ActionButton "Export List" $colAccentGray { 
+                    Start-BackgroundTask "ExportList" $null 
                 }))
 
                 # Perdanger's Preset Button
@@ -4909,5 +4947,6 @@ do {
         Start-Sleep -Seconds 2
     }
 } while ($true)
+
 
 
